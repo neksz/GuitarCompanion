@@ -4,7 +4,7 @@ import { IGuitarTab, ILoginCredentials, ITabAttributes, IGlobalApi } from '../..
 export class WebMegaService implements IGlobalApi {
     private storage: Storage | null = null;
     private rootFolder: MegaFile | null = null;
-    private readonly FOLDER_NAME = 'GuitarCompanionTabs';
+    private readonly FOLDER_NAME = import.meta.env.DEV ? 'GuitarCompanionDev' : 'GuitarCompanionTabs';
 
     constructor() {
         // Try to restore session from saved JSON data
@@ -37,6 +37,10 @@ export class WebMegaService implements IGlobalApi {
                         console.log('[WebMegaService] GuitarCompanionTabs folder ready');
                     } catch (err) {
                         console.error('[WebMegaService] Failed to ensure folder', err);
+                        // If folder creation fails (e.g. storage not ready), clear session to force re-login
+                        localStorage.removeItem('mega_session');
+                        this.storage = null;
+                        this.rootFolder = null;
                     }
                 }).catch((err) => {
                     console.error('[WebMegaService] Auto-login failed, clearing saved session', err);
@@ -109,6 +113,8 @@ export class WebMegaService implements IGlobalApi {
                         await this.ensureFolder();
                     } catch (err) {
                         console.error('[WebMegaService] Failed to create/find folder', err);
+                        this.storage = null;
+                        this.rootFolder = null;
                         resolve({ success: false, error: 'Failed to setup folder' });
                         return;
                     }

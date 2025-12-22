@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: guitar-companion
+appId: com.patrikczobor.guitarcompanion
+productName: Guitar Companion
 directories:
   buildResources: build
 files:
@@ -12,7 +12,8 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: guitar-companion
+  executableName: GuitarCompanion
+  icon: resources/guitar-svgrepo-com.png
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

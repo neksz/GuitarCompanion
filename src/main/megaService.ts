@@ -2,10 +2,12 @@ import { Storage, File } from 'megajs';
 import { IGuitarTab, ITabAttributes } from '../shared/types';
 import { SecureStorage } from './secureStorage';
 
+import { app } from 'electron';
+
 class MegaService {
   private storage: Storage | null = null;
   private readonly SESSION_KEY = 'mega_session';
-  private readonly FOLDER_NAME = 'GuitarCompanionTabs';
+  private readonly FOLDER_NAME = app.isPackaged ? 'GuitarCompanionTabs' : 'GuitarCompanionDev';
   private rootFolder: File | null = null;
 
   async init(): Promise<boolean> {
@@ -122,7 +124,6 @@ class MegaService {
     return this.rootFolder.children.map(f => {
        // eslint-disable-next-line @typescript-eslint/no-explicit-any
        const rawAttrs = (f as any).attributes;
-       console.log(`File ${f.name} attributes content:`, rawAttrs);
 
        // Expect attributes to be directly properly or merged
        const attrs = rawAttrs || {}; 

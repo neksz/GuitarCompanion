@@ -18,6 +18,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
     const [selectedTuning, setSelectedTuning] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | null }>({ key: '', direction: null });
+    const [sortMode, setSortMode] = useState<'alpha' | 'created' | 'recent'>('alpha');
     const [capoFilter, setCapoFilter] = useState('');
     // Store regular File object for Web, and path for Electron
     const [uploadFile, setUploadFile] = useState<{ file: File, path: string } | null>(null);
@@ -79,8 +80,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
         if (!uploadFile) return;
 
         try {
+            const uploadAttributes = {
+                ...attributes,
+                createdAt: new Date().toISOString()
+            };
+
             // Pass both file object and path. The implementation decides which to use.
-            const res = await api.uploadFile(uploadFile.file, uploadFile.path, uploadFile.file.name, attributes);
+            const res = await api.uploadFile(uploadFile.file, uploadFile.path, uploadFile.file.name, uploadAttributes);
             if (res.success) {
                 await loadTabs();
             } else {
@@ -147,6 +153,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
 
     const handleOpen = async (tab: IGuitarTab) => {
         try {
+            // Update last accessed timestamp
+            await api.updateAttributes(tab.id, {
+                ...tab.attributes,
+                lastAccessed: new Date().toISOString()
+            });
+
+            // Note: We don't wait for the above to finish before opening (saves time),
+            // but we do trigger a backgrounds refresh of the tab list if we want it to reflect in UI.
+            loadTabs(false);
+
             await api.openFile(tab.id, tab.name);
         } catch (e) {
             console.error(e);
@@ -200,6 +216,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     }, [tabs]);
 
     const handleSort = (key: string) => {
+        setSortMode('alpha'); // Reset to default mode when using manual column sorting
         setSortConfig(prev => {
             if (prev.key === key) {
                 if (prev.direction === 'asc') return { key, direction: 'desc' };
@@ -268,6 +285,24 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                 if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
                 if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
                 return 0;
+            });
+        } else {
+            // Advanced Sort Modes
+            result.sort((a, b) => {
+                if (sortMode === 'created') {
+                    const dateA = a.attributes?.createdAt || '';
+                    const dateB = b.attributes?.createdAt || '';
+                    if (!dateA && !dateB) return a.name.localeCompare(b.name);
+                    return dateB.localeCompare(dateA); // Newest first
+                } else if (sortMode === 'recent') {
+                    const accessA = a.attributes?.lastAccessed || a.attributes?.createdAt || '';
+                    const accessB = b.attributes?.lastAccessed || b.attributes?.createdAt || '';
+                    if (!accessA && !accessB) return a.name.localeCompare(b.name);
+                    return accessB.localeCompare(accessA); // Newest first
+                } else {
+                    // Alphabetical fallback
+                    return a.name.localeCompare(b.name);
+                }
             });
         }
 
@@ -455,6 +490,39 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
                         <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: 11, color: '#666', marginRight: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Sort by</span>
+                            {[
+                                { id: 'recent', label: 'Recent' },
+                                { id: 'created', label: 'Added' },
+                                { id: 'alpha', label: 'A-Z' }
+                            ].map(m => (
+                                <button
+                                    key={m.id}
+                                    onClick={() => {
+                                        setSortMode(m.id as any);
+                                        setSortConfig({ key: '', direction: null });
+                                    }}
+                                    style={{
+                                        padding: '4px 10px',
+                                        borderRadius: 12,
+                                        border: '1px solid ' + (sortMode === m.id ? '#bb86fc' : '#444'),
+                                        background: sortMode === m.id ? 'rgba(187, 134, 252, 0.15)' : 'transparent',
+                                        color: sortMode === m.id ? '#bb86fc' : '#888',
+                                        fontSize: 12,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        fontWeight: sortMode === m.id ? 600 : 400
+                                    }}
+                                >
+                                    {m.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+                        <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
                         {/* Capo Filter Input */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 12, color: '#888' }}>Capo:</span>
@@ -526,7 +594,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                         Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                                     </div>
                                 </th>
-                                <th className="desktop-only" style={{ padding: '12px 16px', width: 50, textAlign: 'center' }}>Fav</th>
                                 <th style={{ padding: '12px 16px', width: 120, textAlign: 'right' }}>Actions</th>
                             </tr>
                         </thead>
@@ -563,17 +630,23 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                         }}>{tab.name}</span>
 
                                         <button
-                                            className="mobile-only"
                                             onClick={(e) => handleToggleFavorite(e, tab)}
                                             style={{
-                                                background: 'transparent', border: 'none',
-                                                color: tab.attributes?.isFavorite ? '#ffb74d' : '#444',
-                                                cursor: 'pointer', padding: '0 4px', transition: 'all 0.2s',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                background: 'transparent',
+                                                border: 'none',
+                                                color: tab.attributes?.isFavorite ? '#ffb74d' : '#333',
+                                                cursor: 'pointer',
+                                                padding: '4px',
+                                                transition: 'all 0.2s',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
                                                 flexShrink: 0
                                             }}
+                                            onMouseEnter={(e) => { if (!tab.attributes?.isFavorite) e.currentTarget.style.color = '#888'; }}
+                                            onMouseLeave={(e) => { if (!tab.attributes?.isFavorite) e.currentTarget.style.color = '#333'; }}
                                         >
-                                            <Icons.Star size={16} fill={tab.attributes?.isFavorite ? '#ffb74d' : 'transparent'} />
+                                            <Icons.Star size={18} fill={tab.attributes?.isFavorite ? '#ffb74d' : 'transparent'} />
                                         </button>
                                     </td>
 
@@ -597,20 +670,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                                 {tab.attributes.status}
                                             </span>
                                         )}
-                                    </td>
-
-                                    <td className="desktop-only" style={{ padding: '14px 16px', textAlign: 'center' }}>
-                                        <button
-                                            onClick={(e) => handleToggleFavorite(e, tab)}
-                                            style={{
-                                                background: 'transparent', border: 'none',
-                                                color: tab.attributes?.isFavorite ? '#ffb74d' : '#333',
-                                                cursor: 'pointer', padding: 4, transition: 'all 0.2s',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto'
-                                            }}
-                                        >
-                                            <Icons.Star size={18} fill={tab.attributes?.isFavorite ? '#ffb74d' : 'transparent'} />
-                                        </button>
                                     </td>
 
                                     <td className="cell-actions" style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
