@@ -1,0 +1,41 @@
+import {
+    Music,
+    Settings,
+    LogOut,
+    Search,
+    FolderOpen,
+    Star,
+    BookOpen,
+    Upload,
+    Filter,
+    MoreVertical,
+    PlayCircle,
+    CheckCircle,
+    HelpCircle,
+    Edit,
+    Trash2,
+    Download,
+    FileText,
+    RefreshCw
+} from 'lucide-react';
+
+export const Icons = {
+    Music,
+    Settings,
+    LogOut,
+    Search,
+    FolderOpen,
+    Star,
+    BookOpen,
+    Upload,
+    Filter,
+    MoreVertical,
+    PlayCircle,
+    CheckCircle,
+    HelpCircle,
+    Edit,
+    Trash2,
+    Download,
+    FileText,
+    RefreshCw
+};

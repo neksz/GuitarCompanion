@@ -1,0 +1,46 @@
+export interface ITabAttributes {
+  tuning?: string;
+  isFavorite?: boolean;
+  isLearned?: boolean;
+  isLearning?: boolean;
+  capo?: number;
+  artist?: string;
+  title?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+export interface IGuitarTab {
+  id: string; // mega file handle or path
+  name: string;
+  size: number;
+  type: 'pdf' | 'gp5' | 'txt' | 'other';
+  attributes: ITabAttributes;
+  downloadUrl?: string; // Signed URL or local path
+  parentId?: string;
+}
+
+export interface ILoginCredentials {
+  email: string;
+  password: string;
+  keepLoggedIn: boolean;
+  mfaCode?: string;
+}
+
+export interface IStorageStatus {
+  total: number;
+  used: number;
+}
+
+export interface IGlobalApi {
+    checkAuth: () => Promise<boolean>;
+    login: (creds: ILoginCredentials) => Promise<{ success: boolean; error?: string }>;
+    logout: () => Promise<void>;
+    getFiles: () => Promise<IGuitarTab[]>;
+    uploadFile: (file: File, filePath: string, fileName: string, attributes: ITabAttributes) => Promise<{ success: boolean; error?: string }>;
+    deleteFile: (id: string) => Promise<{ success: boolean; error?: string }>;
+    updateAttributes: (id: string, attributes: ITabAttributes) => Promise<{ success: boolean; error?: string }>;
+    getFilePath: (file: File) => string;
+    openFile: (id: string, name: string) => Promise<void>;
+    downloadFile: (id: string, name: string) => Promise<{ success: boolean; canceled?: boolean; error?: string }>;
+}
