@@ -8,12 +8,16 @@ import { api } from '../services/api';
 interface FileBrowserProps {
     searchQuery?: string;
     activeCategory: string;
+    onOpenSidebar?: () => void;
+    onSearch?: (query: string) => void;
 }
 
-export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', activeCategory = 'all' }) => {
+export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', activeCategory = 'all', onOpenSidebar, onSearch }) => {
     const [tabs, setTabs] = useState<IGuitarTab[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+    const [selectedTuning, setSelectedTuning] = useState<string>('');
+    const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | null }>({ key: '', direction: null });
     const [capoFilter, setCapoFilter] = useState('');
     // Store regular File object for Web, and path for Electron
     const [uploadFile, setUploadFile] = useState<{ file: File, path: string } | null>(null);
@@ -172,46 +176,105 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
         setEditTab(tab);
     };
 
-    const filteredTabs = tabs.filter(tab => {
-        const title = tab.name.toLowerCase();
-        const tuning = (tab.attributes?.tuning || '').toLowerCase();
-        const status = tab.attributes?.status || 'None';
-        const capo = tab.attributes?.capo;
+    const handleToggleFavorite = async (e: React.MouseEvent, tab: IGuitarTab) => {
+        e.stopPropagation();
+        try {
+            const res = await api.updateAttributes(tab.id, {
+                ...tab.attributes,
+                isFavorite: !tab.attributes?.isFavorite
+            });
+            if (res.success) {
+                await loadTabs(false);
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    };
 
-        // 1. Text Search (Reverted Capo check here)
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            if (!title.includes(query) && !tuning.includes(query)) return false;
+    // Extract unique tunings from current tabs, always ensuring 'Standard' is the first option
+    const availableTunings = React.useMemo(() => {
+        const tunings = new Set(tabs.map(t => t.attributes?.tuning).filter(Boolean));
+        tunings.delete('Standard'); // Remove to control precise position
+        const sortedOthers = Array.from(tunings).sort();
+        return ['Standard', ...sortedOthers] as string[];
+    }, [tabs]);
+
+    const handleSort = (key: string) => {
+        setSortConfig(prev => {
+            if (prev.key === key) {
+                if (prev.direction === 'asc') return { key, direction: 'desc' };
+                if (prev.direction === 'desc') return { key: '', direction: null };
+            }
+            return { key, direction: 'asc' };
+        });
+    };
+
+    const filteredAndSortedTabs = React.useMemo(() => {
+        let result = tabs.filter(tab => {
+            const title = tab.name.toLowerCase();
+            const tuning = (tab.attributes?.tuning || '').toLowerCase();
+            const status = tab.attributes?.status || 'None';
+            const capo = tab.attributes?.capo;
+
+            // 1. Text Search
+            if (searchQuery) {
+                const query = searchQuery.toLowerCase();
+                if (!title.includes(query) && !tuning.includes(query)) return false;
+            }
+
+            // 2. Capo Filter
+            if (capoFilter !== '') {
+                if (capo !== Number(capoFilter)) return false;
+            }
+
+            // 3. Category Filter (Sidebar)
+            if (activeCategory === 'favorites' && !tab.attributes?.isFavorite) return false;
+
+            if (activeCategory === 'learning') {
+                if (status === 'None' || status === 'Learned') return false;
+            }
+
+            // 4. Multi-select Status Filter
+            if (selectedStatuses.length > 0) {
+                if (!selectedStatuses.includes(status)) return false;
+            }
+
+            // 5. Tuning Filter
+            if (selectedTuning && tab.attributes?.tuning !== selectedTuning) return false;
+
+            return true;
+        });
+
+        // Sorting
+        if (sortConfig.key && sortConfig.direction) {
+            result.sort((a, b) => {
+                let aValue: any = '';
+                let bValue: any = '';
+
+                if (sortConfig.key === 'tuning') {
+                    aValue = a.attributes?.tuning || '';
+                    bValue = b.attributes?.tuning || '';
+                } else if (sortConfig.key === 'name') {
+                    aValue = a.name;
+                    bValue = b.name;
+                } else if (sortConfig.key === 'capo') {
+                    aValue = a.attributes?.capo || 0;
+                    bValue = b.attributes?.capo || 0;
+                } else if (sortConfig.key === 'status') {
+                    aValue = a.attributes?.status || 'None';
+                    bValue = b.attributes?.status || 'None';
+                }
+
+                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
         }
 
-        // 2. Capo Filter
-        if (capoFilter !== '') {
-            if (capo !== Number(capoFilter)) return false;
-        }
+        return result;
+    }, [tabs, searchQuery, activeCategory, selectedStatuses, selectedTuning, capoFilter, sortConfig]);
 
-        // 3. Category Filter (Sidebar)
-        if (activeCategory === 'favorites' && !tab.attributes?.isFavorite) return false;
-
-        // "Learning List" logic: Show "Learning" and "To Learn"
-        // But if User uses the Filter Buttons, should we allow them to override?
-        // User requested: "stats Nothing be a pickabe state, this should not appear in the Learning list"
-        // So for 'learning' category, we default to excluding 'None' and 'Learned'.
-        // However, if the user explicitly selects filters, maybe we should respect that?
-        // Let's stick to the request: "search in the learning list... multiple spect"
-
-        if (activeCategory === 'learning') {
-            // Strict category rules first
-            if (status === 'None' || status === 'Learned') return false;
-        }
-
-        // 4. Multi-select Status Filter
-        // If filters are active, item MUST match one of them
-        if (selectedStatuses.length > 0) {
-            if (!selectedStatuses.includes(status)) return false;
-        }
-
-        return true;
-    });
+    const filteredTabs = filteredAndSortedTabs;
 
     if (loading) return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#aaa', gap: 10 }}>
@@ -220,41 +283,178 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     );
 
     return (
-        <div style={{ padding: 30, color: '#fff', flex: 1, overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                <div>
-                    <h2 style={{ margin: 0, fontSize: 24, fontWeight: 600 }}>My Library</h2>
-                    <p style={{ margin: '5px 0 0', color: '#888', fontSize: 13 }}>{filteredTabs.length} tabs found</p>
-
-                    <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'center' }}>
-                        {/* Status Filter Bar */}
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            {['To Learn', 'Learning', 'Learned', 'None'].map(s => (
-                                <button
-                                    key={s}
-                                    onClick={() => setSelectedStatuses(prev =>
-                                        prev.includes(s)
-                                            ? prev.filter(st => st !== s)
-                                            : [...prev, s]
-                                    )}
-                                    style={{
-                                        padding: '4px 10px',
-                                        borderRadius: 12,
-                                        border: '1px solid ' + (selectedStatuses.includes(s) ? '#bb86fc' : '#444'),
-                                        background: selectedStatuses.includes(s) ? 'rgba(187, 134, 252, 0.15)' : 'transparent',
-                                        color: selectedStatuses.includes(s) ? '#bb86fc' : '#888',
-                                        fontSize: 12,
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    {s}
-                                </button>
-                            ))}
+        <div className="file-browser" style={{ padding: '30px', color: '#fff', flex: 1, overflowY: 'auto' }}>
+            <div className="browser-header" style={{ marginBottom: 20 }}>
+                <div className="header-top-row" style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 16,
+                    flexWrap: 'wrap',
+                    gap: '10px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
+                        {onOpenSidebar && (
+                            <button
+                                className="mobile-only"
+                                onClick={onOpenSidebar}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    padding: '5px',
+                                    marginLeft: -5,
+                                    marginRight: -5
+                                }}
+                            >
+                                <Icons.Menu size={24} />
+                            </button>
+                        )}
+                        <div>
+                            <h2 className="header-title" style={{ margin: 0, fontSize: 20, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {activeCategory === 'favorites' ? 'Favorites' :
+                                    activeCategory === 'learning' ? 'Learning List' : 'My Library'}
+                            </h2>
+                            <p className="desktop-only" style={{ margin: '3px 0 0', color: '#888', fontSize: 13 }}>{filteredTabs.length} tabs found</p>
                         </div>
+                    </div>
 
-                        <div style={{ width: 1, height: 20, background: '#444' }}></div>
+                    <div className="search-container" style={{ display: 'flex', gap: 10, alignItems: 'center', flex: '1 1 auto', maxWidth: '600px', minWidth: '150px' }}>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                            <Icons.Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#666' }} />
+                            <input
+                                type="text"
+                                placeholder={`Search ${activeCategory === 'favorites' ? 'favorites' : activeCategory === 'learning' ? 'learning' : 'library'}...`}
+                                value={searchQuery}
+                                onChange={(e) => onSearch?.(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    background: '#1e1e24',
+                                    border: '1px solid #333',
+                                    padding: '8px 8px 8px 32px',
+                                    borderRadius: 8,
+                                    color: '#fff',
+                                    fontSize: 13,
+                                    outline: 'none',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                        </div>
+                    </div>
 
+                    <div className="browser-actions" style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
+                        <button
+                            onClick={() => loadTabs(true)}
+                            title="Refresh List"
+                            style={{
+                                background: '#2b2b36',
+                                border: '1px solid #333',
+                                color: '#ccc',
+                                width: 38,
+                                height: 38,
+                                borderRadius: 8,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s',
+                                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = '#333'; e.currentTarget.style.color = '#fff'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = '#2b2b36'; e.currentTarget.style.color = '#ccc'; }}
+                        >
+                            <Icons.RefreshCw size={18} />
+                        </button>
+
+                        <input
+                            id="upload-input"
+                            type="file"
+                            onChange={handleFileSelect}
+                            style={{ display: 'none' }}
+                        />
+                        <label
+                            htmlFor="upload-input"
+                            style={{
+                                background: '#bb86fc',
+                                border: 'none',
+                                color: '#121212',
+                                padding: '10px 20px',
+                                height: 38,
+                                borderRadius: 8,
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                boxShadow: '0 4px 12px rgba(187, 134, 252, 0.2)',
+                                cursor: 'pointer',
+                                userSelect: 'none',
+                                boxSizing: 'border-box'
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(187, 134, 252, 0.3)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(187, 134, 252, 0.2)'; }}
+                        >
+                            <Icons.Upload size={18} />
+                            <span className="desktop-only">Upload Tab</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div className="filter-bar" style={{ display: 'flex', gap: '12px 24px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Status Group */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {['To Learn', 'Learning', 'Learned', 'None'].map(s => (
+                            <button
+                                key={s}
+                                onClick={() => setSelectedStatuses(prev =>
+                                    prev.includes(s)
+                                        ? prev.filter(st => st !== s)
+                                        : [...prev, s]
+                                )}
+                                style={{
+                                    padding: '4px 10px',
+                                    borderRadius: 12,
+                                    border: '1px solid ' + (selectedStatuses.includes(s) ? '#bb86fc' : '#444'),
+                                    background: selectedStatuses.includes(s) ? 'rgba(187, 134, 252, 0.15)' : 'transparent',
+                                    color: selectedStatuses.includes(s) ? '#bb86fc' : '#888',
+                                    fontSize: 12,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+
+                    {availableTunings.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+                            <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {availableTunings.map(t => (
+                                    <button
+                                        key={t}
+                                        onClick={() => setSelectedTuning(prev => prev === t ? '' : t)}
+                                        style={{
+                                            padding: '4px 10px',
+                                            borderRadius: 12,
+                                            border: '1px solid ' + (selectedTuning === t ? '#03dac6' : '#444'),
+                                            background: selectedTuning === t ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
+                                            color: selectedTuning === t ? '#03dac6' : '#888',
+                                            fontSize: 12,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+                        <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
                         {/* Capo Filter Input */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 12, color: '#888' }}>Capo:</span>
@@ -266,7 +466,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                 onChange={(e) => setCapoFilter(e.target.value)}
                                 className="no-spin"
                                 style={{
-                                    width: 30, // Reduced width since no spinners
+                                    width: 30,
                                     background: '#2b2b36',
                                     border: '1px solid ' + (capoFilter ? '#bb86fc' : '#444'),
                                     borderRadius: 4,
@@ -279,63 +479,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                         </div>
                     </div>
                 </div>
-
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <button
-                        onClick={() => loadTabs(true)}
-                        title="Refresh List"
-                        style={{
-                            background: '#2b2b36',
-                            border: '1px solid #333',
-                            color: '#ccc',
-                            width: 38,
-                            height: 38,
-                            borderRadius: 8,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s',
-                            boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = '#333'; e.currentTarget.style.color = '#fff'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = '#2b2b36'; e.currentTarget.style.color = '#ccc'; }}
-                    >
-                        <Icons.RefreshCw size={18} />
-                    </button>
-
-                    {/* Label triggers the input by id, providing 100% reliable click area */}
-                    <input
-                        id="upload-input"
-                        type="file"
-                        onChange={handleFileSelect}
-                        style={{ display: 'none' }}
-                    />
-                    <label
-                        htmlFor="upload-input"
-                        style={{
-                            background: '#bb86fc',
-                            border: 'none',
-                            color: '#121212',
-                            padding: '10px 20px',
-                            height: 38,
-                            borderRadius: 8,
-                            fontWeight: '600',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            boxShadow: '0 4px 12px rgba(187, 134, 252, 0.2)',
-                            cursor: 'pointer',
-                            userSelect: 'none',
-                            boxSizing: 'border-box'
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(187, 134, 252, 0.3)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(187, 134, 252, 0.2)'; }}
-                    >
-                        <Icons.Upload size={18} />
-                        Upload Tab
-                    </label>
-                </div>
             </div>
 
             {filteredTabs.length === 0 ? (
@@ -344,29 +487,63 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     <p>No tabs found. Upload some to get started!</p>
                 </div>
             ) : (
-                <div style={{ border: '1px solid #333', borderRadius: 8, overflow: 'hidden', background: '#1e1e24' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                        <thead>
+                <div className="table-container" style={{ border: '1px solid #333', borderRadius: 8, overflow: 'hidden', background: '#1e1e24' }}>
+                    <table className="library-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
+                        <thead className="desktop-only">
                             <tr style={{ background: '#2b2b36', color: '#bbb', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Name</th>
-                                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Tuning</th>
-                                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Capo</th>
-                                <th style={{ padding: '12px 16px', fontWeight: 600 }}>Status</th>
-                                <th style={{ padding: '12px 16px', width: 40 }}>Favorited</th>
+                                <th
+                                    onClick={() => handleSort('name')}
+                                    style={{ padding: '12px 16px', fontWeight: 600, width: 'auto', cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
+                                </th>
+                                <th
+                                    className="desktop-only"
+                                    onClick={() => handleSort('tuning')}
+                                    style={{ padding: '12px 16px', fontWeight: 600, width: 100, cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        Tuning {sortConfig.key === 'tuning' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
+                                </th>
+                                <th
+                                    className="desktop-only"
+                                    onClick={() => handleSort('capo')}
+                                    style={{ padding: '12px 16px', fontWeight: 600, width: 80, cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        Capo {sortConfig.key === 'capo' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
+                                </th>
+                                <th
+                                    className="desktop-only"
+                                    onClick={() => handleSort('status')}
+                                    style={{ padding: '12px 16px', fontWeight: 600, width: 110, cursor: 'pointer', userSelect: 'none' }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                        Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                                    </div>
+                                </th>
+                                <th className="desktop-only" style={{ padding: '12px 16px', width: 50, textAlign: 'center' }}>Fav</th>
                                 <th style={{ padding: '12px 16px', width: 120, textAlign: 'right' }}>Actions</th>
                             </tr>
                         </thead>
+
+
                         <tbody>
                             {filteredTabs.map((tab) => (
                                 <tr
                                     key={tab.id}
+                                    className="tab-row"
                                     style={{ borderBottom: '1px solid #2b2b36', cursor: 'pointer', transition: 'background 0.2s' }}
                                     onClick={() => handleOpen(tab)}
                                     title="Click to open"
                                     onMouseEnter={(e) => e.currentTarget.style.background = '#25252e'}
                                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                 >
-                                    <td style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                                    <td className="cell-main" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                                         <div style={{
                                             width: 36, height: 36, borderRadius: 8,
                                             background: 'rgba(187, 134, 252, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -374,18 +551,44 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                         }}>
                                             <Icons.Music size={20} />
                                         </div>
-                                        <span style={{ fontWeight: 500, fontSize: 14 }}>{tab.name}</span>
+                                        <span className="tab-name" style={{
+                                            fontWeight: 500,
+                                            fontSize: 14,
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            display: 'block',
+                                            flex: 1,
+                                            minWidth: 0
+                                        }}>{tab.name}</span>
+
+                                        <button
+                                            className="mobile-only"
+                                            onClick={(e) => handleToggleFavorite(e, tab)}
+                                            style={{
+                                                background: 'transparent', border: 'none',
+                                                color: tab.attributes?.isFavorite ? '#ffb74d' : '#444',
+                                                cursor: 'pointer', padding: '0 4px', transition: 'all 0.2s',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                flexShrink: 0
+                                            }}
+                                        >
+                                            <Icons.Star size={16} fill={tab.attributes?.isFavorite ? '#ffb74d' : 'transparent'} />
+                                        </button>
                                     </td>
-                                    <td style={{ padding: '14px 16px', color: '#aaa', fontSize: 14 }}>
+
+                                    <td className="desktop-only" style={{ padding: '14px 16px', color: '#888', fontSize: 13, whiteSpace: 'nowrap' }}>
                                         {tab.attributes?.tuning || 'Standard'}
                                     </td>
-                                    <td style={{ padding: '14px 16px', color: '#aaa', fontSize: 14 }}>
+
+                                    <td className="desktop-only" style={{ padding: '14px 16px', color: '#888', fontSize: 13, whiteSpace: 'nowrap' }}>
                                         {tab.attributes?.capo && tab.attributes.capo > 0 ? `Capo ${tab.attributes.capo}` : '-'}
                                     </td>
-                                    <td style={{ padding: '14px 16px' }}>
-                                        {tab.attributes?.status && (
-                                            <span style={{
-                                                padding: '4px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600,
+
+                                    <td className="desktop-only" style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
+                                        {tab.attributes?.status && tab.attributes.status !== 'None' && (
+                                            <span className="status-badge" style={{
+                                                padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
                                                 background: tab.attributes.status === 'Learned' ? 'rgba(76, 175, 80, 0.2)' :
                                                     tab.attributes.status === 'Learning' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(255, 255, 255, 0.1)',
                                                 color: tab.attributes.status === 'Learned' ? '#4caf50' :
@@ -395,10 +598,22 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                             </span>
                                         )}
                                     </td>
-                                    <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                                        {tab.attributes?.isFavorite && <Icons.Star size={16} fill="#bb86fc" color="#bb86fc" />}
+
+                                    <td className="desktop-only" style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                        <button
+                                            onClick={(e) => handleToggleFavorite(e, tab)}
+                                            style={{
+                                                background: 'transparent', border: 'none',
+                                                color: tab.attributes?.isFavorite ? '#ffb74d' : '#333',
+                                                cursor: 'pointer', padding: 4, transition: 'all 0.2s',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto'
+                                            }}
+                                        >
+                                            <Icons.Star size={18} fill={tab.attributes?.isFavorite ? '#ffb74d' : 'transparent'} />
+                                        </button>
                                     </td>
-                                    <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+
+                                    <td className="cell-actions" style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
                                             <button
                                                 onClick={(e) => handleDownload(e, tab)}
@@ -439,6 +654,28 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                             >
                                                 <Icons.Trash2 size={18} />
                                             </button>
+                                        </div>
+                                    </td>
+
+                                    <td className="cell-metadata mobile-only" style={{ padding: '0 16px 14px' }}>
+                                        <div className="metadata-row" style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13, color: '#aaa' }}>
+                                            <span className="mobile-only-inline">
+                                                {tab.attributes?.tuning || 'Standard'}
+                                            </span>
+                                            <span className="mobile-only-inline">
+                                                {tab.attributes?.capo && tab.attributes.capo > 0 ? `Capo ${tab.attributes.capo}` : 'No Capo'}
+                                            </span>
+                                            {tab.attributes?.status && tab.attributes.status !== 'None' && (
+                                                <span className="status-badge" style={{
+                                                    padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                                                    background: tab.attributes.status === 'Learned' ? 'rgba(76, 175, 80, 0.2)' :
+                                                        tab.attributes.status === 'Learning' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                                                    color: tab.attributes.status === 'Learned' ? '#4caf50' :
+                                                        tab.attributes.status === 'Learning' ? '#ffc107' : '#aaa'
+                                                }}>
+                                                    {tab.attributes.status}
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

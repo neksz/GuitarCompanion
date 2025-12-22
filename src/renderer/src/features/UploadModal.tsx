@@ -5,7 +5,7 @@ import { Icons } from '../components/Icons';
 interface UploadModalProps {
     fileName: string;
     initialAttributes?: ITabAttributes;
-    onConfirm: (attributes: ITabAttributes) => void;
+    onConfirm: (attributes: ITabAttributes) => Promise<void> | void;
     onCancel: () => void;
     isEditMode?: boolean;
 }
@@ -15,6 +15,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({ fileName, initialAttri
     const [capo, setCapo] = useState<number | ''>('');
     const [status, setStatus] = useState<'To Learn' | 'Learning' | 'Learned' | 'None'>('None');
     const [isFavorite, setIsFavorite] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (initialAttributes) {
@@ -25,14 +26,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({ fileName, initialAttri
         }
     }, [initialAttributes]);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        onConfirm({
-            tuning: tuning || 'Standard',
-            capo: capo === '' ? 0 : Number(capo),
-            status,
-            isFavorite
-        });
+        if (isSubmitting) return;
+
+        setIsSubmitting(true);
+        try {
+            await onConfirm({
+                tuning: tuning || 'Standard',
+                capo: capo === '' ? 0 : Number(capo),
+                status,
+                isFavorite
+            });
+        } finally {
+            // Note: If onConfirm closes the modal, this component will unmount
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -155,12 +164,19 @@ export const UploadModal: React.FC<UploadModalProps> = ({ fileName, initialAttri
                         </button>
                         <button
                             type="submit"
+                            disabled={isSubmitting}
                             style={{
-                                padding: '10px 20px', backgroundColor: '#bb86fc',
-                                border: 'none', borderRadius: 4, color: '#000', fontWeight: 'bold', cursor: 'pointer'
+                                padding: '10px 20px', backgroundColor: isSubmitting ? '#555' : '#bb86fc',
+                                border: 'none', borderRadius: 4, color: '#000', fontWeight: 'bold',
+                                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                                opacity: isSubmitting ? 0.7 : 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8
                             }}
                         >
-                            {isEditMode ? 'Save Changes' : 'Upload'}
+                            {isSubmitting && <Icons.RefreshCw size={16} className="animate-spin" />}
+                            {isSubmitting ? (isEditMode ? 'Saving...' : 'Uploading...') : (isEditMode ? 'Save Changes' : 'Upload')}
                         </button>
                     </div>
                 </form>

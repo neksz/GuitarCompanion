@@ -8,7 +8,7 @@ const api = {
   logout: () => ipcRenderer.invoke('auth:logout'),
   checkAuth: () => ipcRenderer.invoke('auth:check'),
   getFiles: () => ipcRenderer.invoke('mega:files'),
-  uploadFile: (path: string, name: string, attributes?: any) => ipcRenderer.invoke('mega:upload', { path, name, attributes }),
+  uploadFile: (_file: File, path: string, name: string, attributes?: any) => ipcRenderer.invoke('mega:upload', { path, name, attributes }),
   openFile: (nodeId: string, name: string) => ipcRenderer.invoke('mega:open', { nodeId, name }),
   downloadFile: (nodeId: string, name: string) => ipcRenderer.invoke('mega:download', { nodeId, name }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

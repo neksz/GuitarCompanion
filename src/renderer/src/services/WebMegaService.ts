@@ -164,23 +164,65 @@ export class WebMegaService implements IGlobalApi {
         });
     }
 
-    async uploadFile(file: File, _filePath: string, fileName: string, _attributes: ITabAttributes): Promise<{ success: boolean; error?: string }> {
+    async uploadFile(file: File, _filePath: string, fileName: string, attributes: ITabAttributes): Promise<{ success: boolean; error?: string }> {
         if (!this.rootFolder) return { success: false, error: 'Not logged in' };
 
-        return new Promise((resolve) => {
-            try {
-                (this.rootFolder as any).upload({
+        try {
+            console.log('[WebMegaService] Starting upload...', fileName);
+            const arrayBuffer = await file.arrayBuffer();
+            const buffer = new Uint8Array(arrayBuffer);
+
+            return new Promise((resolve) => {
+                const upload = (this.rootFolder as any).upload({
                     name: fileName,
                     size: file.size
-                }, file).complete.then(() => {
-                     resolve({ success: true });
-                }).catch((err: any) => {
+                }, buffer);
+
+                upload.on('complete', async (uploadedFile: any) => {
+                    console.log('[WebMegaService] Upload complete');
+                    
+                    // Set attributes if provided
+                    if (attributes && Object.keys(attributes).length > 0) {
+                        try {
+                            // Find the file if not provided in event
+                            let f = uploadedFile;
+                            if (!f) {
+                                // Reload folder to find the new file
+                                if ((this.rootFolder as any).reload) {
+                                    await new Promise<void>(res => (this.rootFolder as any).reload(res));
+                                }
+                                f = this.rootFolder?.children?.find(child => child.name === fileName);
+                            }
+
+                            if (f && f.setAttributes) {
+                                console.log('[WebMegaService] Setting attributes...', attributes);
+                                await new Promise<void>((res, rej) => {
+                                    f.setAttributes(attributes, (err: any) => err ? rej(err) : res());
+                                });
+                                
+                                // One final reload to ensure UI sees the attributes
+                                if ((this.rootFolder as any).reload) {
+                                    await new Promise<void>(res => (this.rootFolder as any).reload(res));
+                                }
+                                console.log('[WebMegaService] Attributes set successfully');
+                            }
+                        } catch (attrErr) {
+                            console.error('[WebMegaService] Failed to set attributes:', attrErr);
+                        }
+                    }
+                    
+                    resolve({ success: true });
+                });
+
+                upload.on('error', (err: any) => {
+                    console.error('[WebMegaService] Upload error:', err);
                     resolve({ success: false, error: err.message });
                 });
-            } catch (e: any) {
-                resolve({ success: false, error: e.message });
-            }
-        });
+            });
+        } catch (e: any) {
+            console.error('[WebMegaService] Upload exception:', e);
+            return { success: false, error: e.message };
+        }
     }
 
     async deleteFile(id: string): Promise<{ success: boolean; error?: string }> {

@@ -31,12 +31,16 @@ export function setupHandlers() {
     return megaService.getFiles();
   });
 
-  ipcMain.handle('mega:upload', async (_, { path, name, attributes }) => {
+  ipcMain.handle('mega:upload', async (_, { path: tabPath, name, attributes }) => {
      try {
-         await megaService.uploadFile(path, name, attributes || {});
+         console.log('IPC mega:upload received:', { tabPath, name, attributes });
+         if (typeof tabPath !== 'string') {
+             console.error('IPC mega:upload ERROR: path is not a string!', typeof tabPath, tabPath);
+         }
+         await megaService.uploadFile(tabPath, name, attributes || {});
          return { success: true };
      } catch (e: any) {
-         console.error(e);
+         console.error('IPC mega:upload Exception:', e);
          return { success: false, error: e.message };
      }
   });

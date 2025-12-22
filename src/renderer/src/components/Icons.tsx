@@ -16,7 +16,9 @@ import {
     Trash2,
     Download,
     FileText,
-    RefreshCw
+    RefreshCw,
+    Menu,
+    X
 } from 'lucide-react';
 
 export const Icons = {
@@ -37,5 +39,7 @@ export const Icons = {
     Trash2,
     Download,
     FileText,
-    RefreshCw
+    RefreshCw,
+    Menu,
+    X
 };

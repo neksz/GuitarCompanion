@@ -37,3 +37,124 @@ body {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 1224px) {
+  .app-container {
+    flex-direction: column !important;
+  }
+
+  .app-container {
+    flex-direction: column !important;
+  }
+
+  .sidebar-overlay {
+    display: block !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
+  .file-browser {
+    padding: 15px !important;
+  }
+
+  .header-top-row {
+    gap: 8px !important;
+  }
+
+  .header-title {
+    font-size: 18px !important;
+  }
+
+  .search-container {
+    min-width: 120px !important;
+  }
+
+  .table-container {
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+
+  .library-table {
+    min-width: 0 !important;
+    table-layout: auto !important;
+  }
+
+  .library-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .tab-row {
+    display: grid !important;
+    grid-template-columns: 1fr 120px;
+    padding: 10px 0;
+  }
+
+  .cell-main {
+    grid-column: 1;
+    padding: 10px 0 10px 16px !important;
+    border: none !important;
+    min-width: 0 !important;
+    overflow: hidden;
+    display: flex !important;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .cell-actions {
+    grid-column: 2;
+    padding: 10px 16px 10px 0 !important;
+    border: none !important;
+    justify-content: flex-end;
+    align-items: center;
+    display: flex !important;
+    min-width: 120px;
+  }
+
+  .cell-metadata {
+    grid-column: 1 / span 2;
+    display: block !important;
+    width: 100% !important;
+    padding: 0 16px 10px 64px !important;
+    /* Align with tab name text start */
+    border: none !important;
+  }
+
+  .mobile-only {
+    display: block !important;
+  }
+
+  .mobile-only-inline {
+    display: inline-block !important;
+  }
+
+  .mobile-only-inline::after {
+    content: " • ";
+    margin: 0 4px;
+    color: #444;
+  }
+
+  .mobile-only-inline:last-child::after {
+    content: "";
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
