@@ -21,7 +21,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const [sortMode, setSortMode] = useState<'alpha' | 'created' | 'recent'>('alpha');
     const [capoFilter, setCapoFilter] = useState('');
     // Store regular File object for Web, and path for Electron
-    const [uploadFile, setUploadFile] = useState<{ file: File, path: string } | null>(null);
+    const [uploadQueue, setUploadQueue] = useState<{ file: File, path: string }[]>([]);
+    const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
     const [editTab, setEditTab] = useState<IGuitarTab | null>(null);
     const [deleteTab, setDeleteTab] = useState<IGuitarTab | null>(null); // State for deletion confirmation
 
@@ -63,21 +64,27 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     }, []);
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
 
-        // In Web, path is empty/fake. In Electron, getFilePath returns real path.
-        const filePath = api.getFilePath(file);
+        const newQueue: { file: File, path: string }[] = [];
 
-        // We set both. Our API abstraction handles which one to use.
-        setUploadFile({ file, path: filePath || '' });
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const filePath = api.getFilePath(file) || '';
+            newQueue.push({ file, path: filePath });
+        }
+
+        setUploadQueue(newQueue);
+        setCurrentUploadIndex(0);
 
         // Reset input
         e.target.value = '';
     };
 
     const handleConfirmUpload = async (attributes: ITabAttributes) => {
-        if (!uploadFile) return;
+        const currentItem = uploadQueue[currentUploadIndex];
+        if (!currentItem) return;
 
         try {
             const uploadAttributes = {
@@ -85,19 +92,34 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                 createdAt: new Date().toISOString()
             };
 
-            // Pass both file object and path. The implementation decides which to use.
-            const res = await api.uploadFile(uploadFile.file, uploadFile.path, uploadFile.file.name, uploadAttributes);
+            const res = await api.uploadFile(currentItem.file, currentItem.path, currentItem.file.name, uploadAttributes);
+
             if (res.success) {
-                await loadTabs();
+                // Determine if we have more files
+                if (currentUploadIndex < uploadQueue.length - 1) {
+                    // Move to next file
+                    setCurrentUploadIndex(prev => prev + 1);
+                } else {
+                    // All done
+                    await loadTabs();
+                    setUploadQueue([]);
+                    setCurrentUploadIndex(0);
+                }
             } else {
                 alert('Upload failed: ' + res.error);
+                // On failure we stop? Or skip? Let's stop for now as per plan logic (user can retry)
+                // But generally users might want to continue. Let's stick to "stop and show error" for minimal risk.
             }
         } catch (err) {
             console.error('Upload Error:', err);
             alert('Upload failed');
-        } finally {
-            setUploadFile(null);
         }
+    };
+
+    // Helper to cancel the entire batch
+    const handleCancelUpload = () => {
+        setUploadQueue([]);
+        setCurrentUploadIndex(0);
     };
 
     // Confirm Edit
@@ -310,6 +332,70 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     }, [tabs, searchQuery, activeCategory, selectedStatuses, selectedTuning, capoFilter, sortConfig]);
 
     const filteredTabs = filteredAndSortedTabs;
+    const [isDragging, setIsDragging] = useState(false);
+
+    // Global Drag and Drop Handlers
+    useEffect(() => {
+        const handleWindowDragEnter = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer?.types.includes('Files')) {
+                setIsDragging(true);
+            }
+        };
+
+        const handleWindowDragOver = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        // We handle drop on the window to prevent browser default behavior everywhere
+        const handleWindowDrop = (e: DragEvent) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragging(false);
+        };
+
+        window.addEventListener('dragenter', handleWindowDragEnter);
+        window.addEventListener('dragover', handleWindowDragOver);
+        window.addEventListener('drop', handleWindowDrop);
+
+        return () => {
+            window.removeEventListener('dragenter', handleWindowDragEnter);
+            window.removeEventListener('dragover', handleWindowDragOver);
+            window.removeEventListener('drop', handleWindowDrop);
+        };
+    }, []);
+
+    const handleOverlayDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Only close if we are actually leaving the overlay (not entering a child)
+        // If relatedTarget is null, we left the window.
+        if (!e.relatedTarget || (e.relatedTarget as HTMLElement).nodeName === 'HTML') {
+            setIsDragging(false);
+        }
+    };
+
+    const handleOverlayDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            const newQueue: { file: File, path: string }[] = [];
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const filePath = api.getFilePath(file) || '';
+                newQueue.push({ file, path: filePath });
+            }
+
+            setUploadQueue(newQueue);
+            setCurrentUploadIndex(0);
+        }
+    };
 
     if (loading) return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#aaa', gap: 10 }}>
@@ -318,7 +404,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     );
 
     return (
-        <div className="file-browser" style={{ padding: '30px', color: '#fff', flex: 1, overflowY: 'auto' }}>
+        <div className="file-browser" style={{ padding: '30px', color: '#fff', flex: 1, overflowY: 'auto', position: 'relative' }}>
             <div className="browser-header" style={{ marginBottom: 20 }}>
                 <div className="header-top-row" style={{
                     display: 'flex',
@@ -550,12 +636,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             </div>
 
             {filteredTabs.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#666', border: '2px dashed #333', borderRadius: 12 }}>
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#666', border: '2px dashed #333', borderRadius: 12, position: 'relative' }}>
                     <Icons.FileText size={48} style={{ opacity: 0.3, marginBottom: 10 }} />
                     <p>No tabs found. Upload some to get started!</p>
                 </div>
             ) : (
-                <div className="table-container" style={{ border: '1px solid #333', borderRadius: 8, overflow: 'hidden', background: '#1e1e24' }}>
+                <div
+                    className="table-container"
+                    style={{ border: '1px solid #333', borderRadius: 8, overflow: 'hidden', background: '#1e1e24', position: 'relative' }}
+                >
                     <table className="library-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
                         <thead className="desktop-only">
                             <tr style={{ background: '#2b2b36', color: '#bbb', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -744,11 +833,41 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                 </div>
             )}
 
-            {uploadFile && (
+            {isDragging && (
+                <div
+                    onDragLeave={handleOverlayDragLeave}
+                    onDrop={handleOverlayDrop}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(187, 134, 252, 0.15)',
+                        backdropFilter: 'blur(4px)',
+                        border: '4px dashed #bb86fc',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 9999,
+                        color: '#bb86fc',
+                        flexDirection: 'column',
+                        gap: 20,
+                        pointerEvents: 'all'
+                    }}
+                >
+                    <Icons.Upload size={80} />
+                    <span style={{ fontSize: 28, fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>Drop file to upload</span>
+                </div>
+            )}
+
+            {uploadQueue.length > 0 && uploadQueue[currentUploadIndex] && (
                 <UploadModal
-                    fileName={uploadFile.file.name}
+                    fileName={uploadQueue[currentUploadIndex].file.name}
                     onConfirm={handleConfirmUpload}
-                    onCancel={() => setUploadFile(null)}
+                    onCancel={handleCancelUpload}
+                    batchProgress={{ current: currentUploadIndex + 1, total: uploadQueue.length }}
                 />
             )}
 

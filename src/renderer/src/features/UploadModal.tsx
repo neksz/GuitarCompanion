@@ -8,9 +8,10 @@ interface UploadModalProps {
     onConfirm: (attributes: ITabAttributes) => Promise<void> | void;
     onCancel: () => void;
     isEditMode?: boolean;
+    batchProgress?: { current: number, total: number };
 }
 
-export const UploadModal: React.FC<UploadModalProps> = ({ fileName, initialAttributes, onConfirm, onCancel, isEditMode = false }) => {
+export const UploadModal: React.FC<UploadModalProps> = ({ fileName, initialAttributes, onConfirm, onCancel, isEditMode = false, batchProgress }) => {
     const [tuning, setTuning] = useState('');
     const [capo, setCapo] = useState<number | ''>('');
     const [status, setStatus] = useState<'To Learn' | 'Learning' | 'Learned' | 'None'>('None');
@@ -59,10 +60,24 @@ export const UploadModal: React.FC<UploadModalProps> = ({ fileName, initialAttri
                 boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
                 border: '1px solid #333'
             }}>
-                <h3 style={{ margin: '0 0 16px 0', color: '#fff', fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {isEditMode ? <Icons.Edit size={20} color="#bb86fc" /> : <Icons.Upload size={20} color="#bb86fc" />}
-                    {isEditMode ? 'Edit Tab Details' : 'Upload Details'}
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                    <h3 style={{ margin: 0, color: '#fff', fontSize: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {isEditMode ? <Icons.Edit size={20} color="#bb86fc" /> : <Icons.Upload size={20} color="#bb86fc" />}
+                        {isEditMode ? 'Edit Tab Details' : 'Upload Details'}
+                    </h3>
+                    {batchProgress && (
+                        <div style={{
+                            background: 'rgba(187, 134, 252, 0.2)',
+                            color: '#bb86fc',
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            fontSize: 12,
+                            fontWeight: 600
+                        }}>
+                            {batchProgress.current} / {batchProgress.total} processed
+                        </div>
+                    )}
+                </div>
 
                 <p style={{ color: '#ccc', marginBottom: 20, wordBreak: 'break-all' }}>
                     File: <span style={{ color: '#fff' }}>{fileName}</span>
