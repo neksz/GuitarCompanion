@@ -103,4 +103,15 @@ export function setupHandlers() {
           return { success: false, error: e.message };
       }
   });
+
+  ipcMain.handle('pdf:analyze', async (_, { filePath }) => {
+      try {
+          const { analyzePdf } = await import('./pdfAnalyzer');
+          const result = await analyzePdf(filePath);
+          return { success: true, data: result };
+      } catch (e: any) {
+          console.error('PDF analysis error:', e);
+          return { success: false, error: e.message };
+      }
+  });
 }

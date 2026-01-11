@@ -43,4 +43,5 @@ export interface IGlobalApi {
     getFilePath: (file: File) => string;
     openFile: (id: string, name: string) => Promise<void>;
     downloadFile: (id: string, name: string) => Promise<{ success: boolean; canceled?: boolean; error?: string }>;
+    analyzePdf?: (filePath: string) => Promise<{ success: boolean; error?: string; data?: { tuning: string; capo: number; previewBase64: string | null } }>;
 }

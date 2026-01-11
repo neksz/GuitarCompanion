@@ -23,6 +23,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     // Store regular File object for Web, and path for Electron
     const [uploadQueue, setUploadQueue] = useState<{ file: File, path: string }[]>([]);
     const [currentUploadIndex, setCurrentUploadIndex] = useState(0);
+    const [pdfAnalysis, setPdfAnalysis] = useState<{ tuning: string, capo: number, previewBase64: string | null } | null>(null);
     const [editTab, setEditTab] = useState<IGuitarTab | null>(null);
     const [deleteTab, setDeleteTab] = useState<IGuitarTab | null>(null); // State for deletion confirmation
 
@@ -120,7 +121,46 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const handleCancelUpload = () => {
         setUploadQueue([]);
         setCurrentUploadIndex(0);
+        setPdfAnalysis(null);
     };
+
+    // PDF Analysis Effect - runs when queue changes or index changes
+    useEffect(() => {
+        const analyzeCurrentPdf = async () => {
+            if (uploadQueue.length === 0) {
+                setPdfAnalysis(null);
+                return;
+            }
+
+            const currentItem = uploadQueue[currentUploadIndex];
+            if (!currentItem) {
+                setPdfAnalysis(null);
+                return;
+            }
+
+            // Check if it's a PDF
+            const isPdf = currentItem.file.name.toLowerCase().endsWith('.pdf');
+
+            if (isPdf && currentItem.path && api.analyzePdf) {
+                try {
+                    console.log('[FileBrowser] Analyzing PDF:', currentItem.path);
+                    const result = await api.analyzePdf(currentItem.path);
+                    if (result.success && result.data) {
+                        setPdfAnalysis(result.data);
+                    } else {
+                        setPdfAnalysis(null);
+                    }
+                } catch (err) {
+                    console.error('[FileBrowser] PDF Analysis error:', err);
+                    setPdfAnalysis(null);
+                }
+            } else {
+                setPdfAnalysis(null);
+            }
+        };
+
+        analyzeCurrentPdf();
+    }, [uploadQueue, currentUploadIndex]);
 
     // Confirm Edit
     const handleConfirmEdit = async (attributes: ITabAttributes) => {
@@ -868,6 +908,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     onConfirm={handleConfirmUpload}
                     onCancel={handleCancelUpload}
                     batchProgress={{ current: currentUploadIndex + 1, total: uploadQueue.length }}
+                    pdfPreview={pdfAnalysis?.previewBase64}
+                    suggestedAttributes={pdfAnalysis ? { tuning: pdfAnalysis.tuning, capo: pdfAnalysis.capo } : undefined}
                 />
             )}
 

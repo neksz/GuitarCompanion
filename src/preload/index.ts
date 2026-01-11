@@ -15,7 +15,8 @@ const api = {
   deleteFile: (nodeId: string) => ipcRenderer.invoke('mega:delete', { nodeId }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateAttributes: (nodeId: string, attributes: any) => ipcRenderer.invoke('mega:updateAttributes', { nodeId, attributes }),
-  getFilePath: (file: File) => webUtils.getPathForFile(file)
+  getFilePath: (file: File) => webUtils.getPathForFile(file),
+  analyzePdf: (filePath: string) => ipcRenderer.invoke('pdf:analyze', { filePath })
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
