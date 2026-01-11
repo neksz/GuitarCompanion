@@ -11,6 +11,8 @@ interface UploadModalProps {
     batchProgress?: { current: number, total: number };
     pdfPreview?: string | null;
     suggestedAttributes?: { tuning?: string, capo?: number };
+    isDuplicate?: boolean;
+    onSkip?: () => void;
 }
 
 export const UploadModal: React.FC<UploadModalProps> = ({
@@ -21,7 +23,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     isEditMode = false,
     batchProgress,
     pdfPreview,
-    suggestedAttributes
+    suggestedAttributes,
+    isDuplicate = false,
+    onSkip
 }) => {
     const [tuning, setTuning] = useState('');
     const [capo, setCapo] = useState<number | ''>('');
@@ -184,9 +188,27 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                             )}
                         </div>
 
-                        <p style={{ color: '#ccc', marginBottom: 20, wordBreak: 'break-all', fontSize: 13 }}>
+                        <p style={{ color: '#ccc', marginBottom: isDuplicate ? 8 : 20, wordBreak: 'break-all', fontSize: 13 }}>
                             File: <span style={{ color: '#fff' }}>{fileName}</span>
                         </p>
+
+                        {isDuplicate && (
+                            <div style={{
+                                background: 'rgba(244, 67, 54, 0.15)',
+                                border: '1px solid #f44336',
+                                borderRadius: 6,
+                                padding: '10px 14px',
+                                marginBottom: 16,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10
+                            }}>
+                                <span style={{ color: '#f44336', fontSize: 16 }}>⚠️</span>
+                                <span style={{ color: '#f44336', fontSize: 13 }}>
+                                    A file with this name already exists. Please rename it or choose a different file.
+                                </span>
+                            </div>
+                        )}
 
                         <form onSubmit={handleSubmit}>
                             <div style={{ marginBottom: 16 }}>
@@ -271,7 +293,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                                 <label htmlFor="fav" style={{ color: '#fff', cursor: 'pointer' }}>Mark as Favorite</label>
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <button
                                     type="button"
                                     onClick={onCancel}
@@ -280,24 +302,42 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                                         border: '1px solid #555', borderRadius: 4, color: '#ccc', cursor: 'pointer'
                                     }}
                                 >
-                                    Cancel
+                                    {(batchProgress && batchProgress.total > 1) ? 'Cancel All' : 'Cancel'}
                                 </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSubmitting}
-                                    style={{
-                                        padding: '10px 20px', backgroundColor: isSubmitting ? '#555' : '#bb86fc',
-                                        border: 'none', borderRadius: 4, color: '#000', fontWeight: 'bold',
-                                        cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                                        opacity: isSubmitting ? 0.7 : 1,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 8
-                                    }}
-                                >
-                                    {isSubmitting && <Icons.RefreshCw size={16} className="animate-spin" />}
-                                    {isSubmitting ? (isEditMode ? 'Saving...' : 'Uploading...') : (isEditMode ? 'Save Changes' : 'Upload')}
-                                </button>
+
+                                <div style={{ display: 'flex', gap: 12 }}>
+                                    {onSkip && batchProgress && batchProgress.total > 1 && (
+                                        <button
+                                            type="button"
+                                            onClick={onSkip}
+                                            style={{
+                                                padding: '10px 16px', backgroundColor: 'transparent',
+                                                border: '1px solid #555', borderRadius: 4, color: '#ccc', cursor: 'pointer'
+                                            }}
+                                        >
+                                            Skip
+                                        </button>
+                                    )}
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting || isDuplicate}
+                                        style={{
+                                            padding: '10px 20px',
+                                            backgroundColor: (isSubmitting || isDuplicate) ? '#555' : '#bb86fc',
+                                            border: 'none', borderRadius: 4,
+                                            color: isDuplicate ? '#888' : '#000',
+                                            fontWeight: 'bold',
+                                            cursor: (isSubmitting || isDuplicate) ? 'not-allowed' : 'pointer',
+                                            opacity: (isSubmitting || isDuplicate) ? 0.7 : 1,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 8
+                                        }}
+                                    >
+                                        {isSubmitting && <Icons.RefreshCw size={16} className="animate-spin" />}
+                                        {isSubmitting ? (isEditMode ? 'Saving...' : 'Uploading...') : (isEditMode ? 'Save Changes' : 'Upload')}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>

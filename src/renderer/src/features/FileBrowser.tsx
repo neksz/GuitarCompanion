@@ -125,6 +125,19 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
         setPdfAnalysis(null);
     };
 
+    // Skip current file
+    const handleSkip = async () => {
+        if (currentUploadIndex < uploadQueue.length - 1) {
+            setCurrentUploadIndex(prev => prev + 1);
+        } else {
+            // If it's the last one, finish up
+            setUploadQueue([]);
+            setCurrentUploadIndex(0);
+            setPdfAnalysis(null);
+            await loadTabs();
+        }
+    };
+
     // PDF Analysis Effect - runs when queue changes or index changes
     useEffect(() => {
         const analyzeCurrentPdf = async () => {
@@ -395,6 +408,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
         const handleWindowDragEnter = (e: DragEvent) => {
             e.preventDefault();
             e.stopPropagation();
+
+            // Disable drag overlay if any modal is open
+            if (uploadQueue.length > 0 || editTab || deleteTab) return;
+
             if (e.dataTransfer?.types.includes('Files')) {
                 setIsDragging(true);
             }
@@ -421,7 +438,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             window.removeEventListener('dragover', handleWindowDragOver);
             window.removeEventListener('drop', handleWindowDrop);
         };
-    }, []);
+    }, [uploadQueue.length, editTab, deleteTab]);
 
     const handleOverlayDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
@@ -547,6 +564,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                         <input
                             id="upload-input"
                             type="file"
+                            multiple
                             onChange={handleFileSelect}
                             style={{ display: 'none' }}
                         />
@@ -926,6 +944,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     batchProgress={{ current: currentUploadIndex + 1, total: uploadQueue.length }}
                     pdfPreview={pdfAnalysis?.previewBase64}
                     suggestedAttributes={pdfAnalysis ? { tuning: pdfAnalysis.tuning, capo: pdfAnalysis.capo } : undefined}
+                    isDuplicate={tabs.some(t => t.name === uploadQueue[currentUploadIndex].file.name)}
+                    onSkip={handleSkip}
                 />
             )}
 
