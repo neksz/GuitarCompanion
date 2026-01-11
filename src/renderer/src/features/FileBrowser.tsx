@@ -4,6 +4,7 @@ import { UploadModal } from './UploadModal';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Icons } from '../components/Icons';
 import { api } from '../services/api';
+import { analyzePdfInBrowser } from '../utils/browserPdfAnalyzer';
 
 interface FileBrowserProps {
     searchQuery?: string;
@@ -141,9 +142,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             // Check if it's a PDF
             const isPdf = currentItem.file.name.toLowerCase().endsWith('.pdf');
 
-            if (isPdf && currentItem.path && api.analyzePdf) {
+            if (!isPdf) {
+                setPdfAnalysis(null);
+                return;
+            }
+
+            // Try Electron API first (for desktop), then fall back to browser analysis
+            if (currentItem.path && api.analyzePdf) {
+                // Electron path - use IPC
                 try {
-                    console.log('[FileBrowser] Analyzing PDF:', currentItem.path);
+                    console.log('[FileBrowser] Analyzing PDF via Electron:', currentItem.path);
                     const result = await api.analyzePdf(currentItem.path);
                     if (result.success && result.data) {
                         setPdfAnalysis(result.data);
@@ -151,11 +159,19 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                         setPdfAnalysis(null);
                     }
                 } catch (err) {
-                    console.error('[FileBrowser] PDF Analysis error:', err);
+                    console.error('[FileBrowser] Electron PDF Analysis error:', err);
                     setPdfAnalysis(null);
                 }
             } else {
-                setPdfAnalysis(null);
+                // Browser fallback - use File object directly
+                try {
+                    console.log('[FileBrowser] Analyzing PDF in browser:', currentItem.file.name);
+                    const result = await analyzePdfInBrowser(currentItem.file);
+                    setPdfAnalysis(result);
+                } catch (err) {
+                    console.error('[FileBrowser] Browser PDF Analysis error:', err);
+                    setPdfAnalysis(null);
+                }
             }
         };
 
