@@ -50,8 +50,6 @@ function detectCapo(text: string): number {
 }
 
 export async function analyzePdf(filePath: string): Promise<PdfAnalysisResult> {
-    console.log('[PDF Analyzer] Starting analysis for:', filePath);
-    
     const result: PdfAnalysisResult = {
         tuning: 'Standard',
         capo: 0,
@@ -73,59 +71,21 @@ export async function analyzePdf(filePath: string): Promise<PdfAnalysisResult> {
         result.tuning = detectTuning(firstText);
         result.capo = detectCapo(firstText);
         
-        // TODO: Preview generation disabled for now - pdfjs-dist + canvas has compatibility issues
-        result.previewBase64 = null;
+        // Generate preview using pdf-parse's built-in screenshot method
+        try {
+            const screenshotResult = await parser.getScreenshot({ scale: 1.0 });
+            if (screenshotResult.pages.length > 0) {
+                result.previewBase64 = screenshotResult.pages[0].dataUrl;
+            }
+        } catch (previewError) {
+            console.error('[PDF Analyzer] Preview generation failed:', previewError);
+            // Continue without preview
+        }
         
     } catch (error) {
         console.error('[PDF Analyzer] Error:', error);
     }
 
-    console.log('[PDF Analyzer]', filePath.split(/[/\\]/).pop(), '→ Tuning:', result.tuning, '| Capo:', result.capo);
+    console.log('[PDF Analyzer]', filePath.split(/[/\\]/).pop(), '→ Tuning:', result.tuning, '| Capo:', result.capo, '| Preview:', result.previewBase64 ? 'yes' : 'no');
     return result;
-}
-
-async function generatePdfPreview(pdfBuffer: Buffer): Promise<string | null> {
-    try {
-        // Dynamic import for pdfjs-dist (ES module)
-        const pdfjsLib = await import('pdfjs-dist');
-        
-        // Load PDF document
-        const loadingTask = pdfjsLib.getDocument({ data: pdfBuffer });
-        const pdf = await loadingTask.promise;
-        
-        // Get first page
-        const page = await pdf.getPage(1);
-        
-        // Set scale for preview (higher = better quality but larger)
-        const scale = 1.5;
-        const viewport = page.getViewport({ scale });
-        
-        // Create canvas using node-canvas alternative approach
-        // Since we're in Node.js, we'll use a simpler approach:
-        // We'll render to an OffscreenCanvas-like structure
-        
-        // For Electron main process, we need a canvas implementation
-        // Using pdfjs-dist's built-in canvas support
-        const { createCanvas } = await import('canvas');
-        
-        const canvas = createCanvas(viewport.width, Math.floor(viewport.height * 0.35)); // Top 35%
-        const context = canvas.getContext('2d');
-        
-        // Render page
-        await page.render({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            canvasContext: context as any,
-            viewport: viewport,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            canvas: canvas as any
-        }).promise;
-        
-        // Convert to base64 PNG
-        const base64 = canvas.toDataURL('image/png');
-        
-        return base64;
-    } catch (error) {
-        console.error('PDF Preview Generation Error:', error);
-        return null;
-    }
 }
