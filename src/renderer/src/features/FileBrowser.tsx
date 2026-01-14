@@ -608,7 +608,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                     width: '100%',
                                     background: '#1e1e24',
                                     border: '1px solid #333',
-                                    padding: '8px 8px 8px 32px',
+                                    padding: '8px 30px 8px 32px',
                                     borderRadius: 8,
                                     color: '#fff',
                                     fontSize: 13,
@@ -616,6 +616,28 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                     boxSizing: 'border-box'
                                 }}
                             />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => onSearch?.('')}
+                                    style={{
+                                        position: 'absolute',
+                                        right: 8,
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#666',
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                    className="clear-search-btn"
+                                >
+                                    <Icons.X size={14} />
+                                </button>
+                            )}
                         </div>
                     </div>
 
