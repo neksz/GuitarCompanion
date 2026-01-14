@@ -1,5 +1,5 @@
 import { Storage, File as MegaFile } from 'megajs';
-import { IGuitarTab, ILoginCredentials, ITabAttributes, IGlobalApi } from '../../../shared/types';
+import { IGuitarTab, ILoginCredentials, ITabAttributes, IGlobalApi, ISettings } from '../../../shared/types';
 
 export class WebMegaService implements IGlobalApi {
     private storage: Storage | null = null;
@@ -167,7 +167,7 @@ export class WebMegaService implements IGlobalApi {
                 attributes: attrs,
                 downloadUrl: ''
             };
-        });
+        }).filter(t => t.name !== 'settings.json');
     }
 
     async uploadFile(file: File, _filePath: string, fileName: string, attributes: ITabAttributes): Promise<{ success: boolean; error?: string }> {
@@ -398,5 +398,57 @@ export class WebMegaService implements IGlobalApi {
         });
     }
 
+    async getSettings(): Promise<ISettings> {
+        const defaultSettings: ISettings = {
+            defaultSortMode: 'alpha'
+        };
 
+        if (!this.rootFolder || !this.rootFolder.children) {
+            return defaultSettings;
+        }
+
+        const settingsFile = this.rootFolder.children.find(f => f.name === 'settings.json');
+        if (!settingsFile) {
+            return defaultSettings;
+        }
+
+        try {
+            console.log('[WebMegaService] Downloading settings.json');
+            const blob = await this.downloadToBlob(settingsFile, 'application/json');
+            const text = await blob.text();
+            const settings = JSON.parse(text);
+            return { ...defaultSettings, ...settings };
+        } catch (e) {
+            console.error('[WebMegaService] Error loading settings:', e);
+            return defaultSettings;
+        }
+    }
+
+    async saveSettings(settings: ISettings): Promise<{ success: boolean; error?: string }> {
+        if (!this.rootFolder) return { success: false, error: 'Not logged in' };
+
+        try {
+            console.log('[WebMegaService] Saving settings...', settings);
+            const jsonString = JSON.stringify(settings, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            // Convert to file for upload
+            const file = new File([blob], 'settings.json', { type: 'application/json' });
+            
+            const existing = this.rootFolder.children?.find(f => f.name === 'settings.json');
+            if (existing) {
+                console.log('[WebMegaService] Deleting old settings file...');
+                await new Promise<void>((resolve) => {
+                    (existing as any).delete((err: any) => {
+                        if (err) console.error('Error deleting old settings:', err);
+                        resolve();
+                    });
+                });
+            }
+
+            return this.uploadFile(file, '', 'settings.json', {});
+        } catch (e: any) {
+             console.error('[WebMegaService] Save settings error:', e);
+             return { success: false, error: e.message };
+        }
+    }
 }

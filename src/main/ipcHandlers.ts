@@ -114,4 +114,18 @@ export function setupHandlers() {
           return { success: false, error: e.message };
       }
   });
+
+  ipcMain.handle('mega:getSettings', async () => {
+      return megaService.getSettings();
+  });
+
+  ipcMain.handle('mega:saveSettings', async (_, { settings }) => {
+      try {
+          await megaService.saveSettings(settings);
+          return { success: true };
+      } catch (e: any) {
+          console.error(e);
+          return { success: false, error: e.message };
+      }
+  });
 }

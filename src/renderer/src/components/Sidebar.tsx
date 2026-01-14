@@ -10,9 +10,10 @@ interface SidebarProps {
     setActiveTab: (tab: string) => void;
     isOpen?: boolean;
     onClose?: () => void;
+    onSettings?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, onClose, onSettings }) => {
     const { logout } = useAuth();
 
 
@@ -50,6 +51,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
             </nav>
 
             <div className={styles.footer}>
+                <div className={styles.navItem} onClick={() => onSettings && onSettings()}>
+                    <Icons.Settings size={18} />
+                    <span>Settings</span>
+                </div>
                 <div className={styles.navItem} onClick={() => logout()}>
                     <LogOut size={18} />
                     <span>Sign Out</span>

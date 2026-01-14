@@ -1,5 +1,5 @@
 import { Storage, File } from 'megajs';
-import { IGuitarTab, ITabAttributes } from '../shared/types';
+import { IGuitarTab, ITabAttributes, ISettings } from '../shared/types';
 import { SecureStorage } from './secureStorage';
 
 import { app } from 'electron';
@@ -275,18 +275,21 @@ class MegaService {
     const file = this.rootFolder.children.find(f => f.nodeId === nodeId);
     if (!file) throw new Error("File not found");
 
-    return new Promise<void>((resolve, reject) => {
-      const fs = require('fs');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const stream = (file as any).download({});
-      const writeStream = fs.createWriteStream(destPath);
+    const { pipeline } = require('stream/promises');
+    const fs = require('fs');
+    console.log('[MegaService] downloadFile: starting stream for', nodeId, 'to', destPath);
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stream = (file as any).download({});
+    const writeStream = fs.createWriteStream(destPath);
 
-      stream.pipe(writeStream);
-
-      writeStream.on('finish', () => resolve());
-      writeStream.on('error', (err: any) => reject(err));
-      stream.on('error', (err: any) => reject(err));
-    });
+    try {
+        await pipeline(stream, writeStream);
+        console.log('[MegaService] downloadFile: pipeline completed');
+    } catch (err) {
+        console.error('[MegaService] downloadFile: pipeline error', err);
+        throw err;
+    }
   }
   async deleteFile(nodeId: string): Promise<void> {
     if (!this.rootFolder || !this.rootFolder.children) throw new Error("No folder");
@@ -353,6 +356,69 @@ class MegaService {
             reject(new Error("File does not support attributes"));
         }
     });
+  }
+
+  async getSettings(): Promise<ISettings> {
+    const defaultSettings: ISettings = {
+        defaultSortMode: 'alpha'
+    };
+
+    if (!this.rootFolder || !this.rootFolder.children) return defaultSettings;
+
+    const settingsFile = this.rootFolder.children.find(f => f.name === 'settings.json');
+    if (!settingsFile || !settingsFile.nodeId) return defaultSettings;
+
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        const os = require('os');
+        const crypto = require('crypto');
+        const uniqueId = crypto.randomBytes(4).toString('hex');
+        const tempPath = path.join(os.tmpdir(), `guitar-companion-settings-${uniqueId}.json`);
+        
+        console.log('[MegaService] getSettings: Downloading to', tempPath);
+        await this.downloadFile(settingsFile.nodeId, tempPath);
+        
+        if (!fs.existsSync(tempPath)) {
+             console.error('[MegaService] getSettings: File does not exist after download!', tempPath);
+             return defaultSettings;
+        }
+
+        const content = fs.readFileSync(tempPath, 'utf-8');
+        console.log('[MegaService] getSettings: Read content length', content.length);
+        
+        // Clean up
+        try { fs.unlinkSync(tempPath); } catch (e) {}
+        
+        return { ...defaultSettings, ...JSON.parse(content) };
+    } catch (e) {
+        console.error('[MegaService] Error loading settings:', e);
+        return defaultSettings;
+    }
+  }
+
+  async saveSettings(settings: ISettings): Promise<void> {
+    if (!this.rootFolder) throw new Error("No folder");
+
+    console.log('Saving settings:', settings);
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    const tempPath = path.join(os.tmpdir(), 'guitar-companion-settings-upload.json');
+    
+    fs.writeFileSync(tempPath, JSON.stringify(settings, null, 2));
+
+    try {
+        // Delete existing if any
+        const existing = this.rootFolder.children?.find(f => f.name === 'settings.json');
+        if (existing && existing.nodeId) {
+             await this.deleteFile(existing.nodeId);
+        }
+
+        await this.uploadFile(tempPath, 'settings.json', {});
+    } finally {
+        try { fs.unlinkSync(tempPath); } catch (e) {}
+    }
   }
 }
 

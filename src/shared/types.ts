@@ -33,6 +33,15 @@ export interface IStorageStatus {
   used: number;
 }
 
+export interface ISettings {
+  defaultSortMode: 'alpha' | 'created' | 'recent' | 'played';
+  defaultSortDirection?: 'asc' | 'desc'; 
+  defaultTuning?: string;
+  defaultStatusFilter?: string[];
+  defaultCapo?: number;
+  defaultFileType?: 'all' | 'pdf' | 'gp' | 'txt';
+}
+
 export interface IGlobalApi {
     checkAuth: () => Promise<boolean>;
     login: (creds: ILoginCredentials) => Promise<{ success: boolean; error?: string }>;
@@ -45,4 +54,6 @@ export interface IGlobalApi {
     openFile: (id: string, name: string) => Promise<void>;
     downloadFile: (id: string, name: string) => Promise<{ success: boolean; canceled?: boolean; error?: string }>;
     analyzePdf?: (filePath: string) => Promise<{ success: boolean; error?: string; data?: { tuning: string; capo: number; previewBase64: string | null } }>;
+    getSettings: () => Promise<ISettings>;
+    saveSettings: (settings: ISettings) => Promise<{ success: boolean; error?: string }>;
 }

@@ -16,7 +16,10 @@ const api = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateAttributes: (nodeId: string, attributes: any) => ipcRenderer.invoke('mega:updateAttributes', { nodeId, attributes }),
   getFilePath: (file: File) => webUtils.getPathForFile(file),
-  analyzePdf: (filePath: string) => ipcRenderer.invoke('pdf:analyze', { filePath })
+  analyzePdf: (filePath: string) => ipcRenderer.invoke('pdf:analyze', { filePath }),
+  getSettings: () => ipcRenderer.invoke('mega:getSettings'),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  saveSettings: (settings: any) => ipcRenderer.invoke('mega:saveSettings', { settings })
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

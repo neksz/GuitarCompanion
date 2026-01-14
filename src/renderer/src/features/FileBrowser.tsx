@@ -11,6 +11,7 @@ interface FileBrowserProps {
     activeCategory: string;
     onOpenSidebar?: () => void;
     onSearch?: (query: string) => void;
+    refreshTrigger?: number;
 }
 
 const getFileType = (filename: string): 'pdf' | 'gp' | 'txt' | 'other' => {
@@ -36,7 +37,7 @@ const getFileIcon = (filename: string) => {
     }
 };
 
-export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', activeCategory = 'all', onOpenSidebar, onSearch }) => {
+export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', activeCategory = 'all', onOpenSidebar, onSearch, refreshTrigger }) => {
 
     const [tabs, setTabs] = useState<IGuitarTab[]>([]);
     const [loading, setLoading] = useState(true);
@@ -80,6 +81,25 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             if (showSpinner) setLoading(false);
         }
     };
+
+    // Load defaults from settings
+    useEffect(() => {
+        const applyDefaults = async () => {
+            try {
+                const settings = await api.getSettings();
+                if (settings) {
+                    if (settings.defaultSortMode) setSortMode(settings.defaultSortMode);
+                    if (settings.defaultTuning) setSelectedTuning(settings.defaultTuning);
+                    if (settings.defaultCapo !== undefined) setCapoFilter(settings.defaultCapo.toString());
+                    if (settings.defaultFileType) setFileTypeFilter(settings.defaultFileType);
+                    // If we had default status filters, apply them here too
+                }
+            } catch (err) {
+                console.error('[FileBrowser] Failed to load default settings', err);
+            }
+        };
+        applyDefaults();
+    }, [refreshTrigger]); // Reload settings when refreshTrigger changes
 
     useEffect(() => {
         // Auto-load tabs on mount
