@@ -13,7 +13,31 @@ interface FileBrowserProps {
     onSearch?: (query: string) => void;
 }
 
+const getFileType = (filename: string): 'pdf' | 'gp' | 'txt' | 'other' => {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'pdf';
+    if (lower.endsWith('.gp3') || lower.endsWith('.gp4') || lower.endsWith('.gp5') || lower.endsWith('.gpx') || lower.endsWith('.gp')) return 'gp';
+    if (lower.endsWith('.txt')) return 'txt';
+    return 'other';
+};
+
+const getFileIcon = (filename: string) => {
+    const type = getFileType(filename);
+    switch (type) {
+        case 'pdf':
+            return <Icons.FileText size={20} />;
+        case 'gp':
+            // Use FileAudio or Music as a proxy for Guitar Pro files
+            return <Icons.FileAudio size={20} />;
+        case 'txt':
+            return <Icons.FileText size={20} />; // Or maybe a different icon if we had one, but FileText is fine
+        default:
+            return <Icons.File size={20} />;
+    }
+};
+
 export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', activeCategory = 'all', onOpenSidebar, onSearch }) => {
+
     const [tabs, setTabs] = useState<IGuitarTab[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
@@ -27,6 +51,23 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const [pdfAnalysis, setPdfAnalysis] = useState<{ tuning: string, capo: number, previewBase64: string | null } | null>(null);
     const [editTab, setEditTab] = useState<IGuitarTab | null>(null);
     const [deleteTab, setDeleteTab] = useState<IGuitarTab | null>(null); // State for deletion confirmation
+    const [fileTypeFilter, setFileTypeFilter] = useState<'all' | 'pdf' | 'gp' | 'txt'>('all'); // File Type Filter
+
+    // Extract unique file types from current tabs
+    const availableFileTypes = React.useMemo(() => {
+        const types = new Set<string>();
+        tabs.forEach(t => {
+            types.add(getFileType(t.name));
+        });
+
+        const options = [{ id: 'all', label: 'All' }];
+        if (types.has('pdf')) options.push({ id: 'pdf', label: 'PDF' });
+        if (types.has('gp')) options.push({ id: 'gp', label: 'Guitar Pro' });
+        if (types.has('txt')) options.push({ id: 'txt', label: 'Text' });
+
+        return options;
+    }, [tabs]);
+
 
     const loadTabs = async (showSpinner = true) => {
         try {
@@ -351,6 +392,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             // 5. Tuning Filter
             if (selectedTuning && tab.attributes?.tuning !== selectedTuning) return false;
 
+            // 6. File Type Filter
+            if (fileTypeFilter !== 'all') {
+                const type = getFileType(tab.name);
+                if (type !== fileTypeFilter) return false;
+            }
+
             return true;
         });
 
@@ -404,7 +451,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
         }
 
         return result;
-    }, [tabs, searchQuery, activeCategory, selectedStatuses, selectedTuning, capoFilter, sortConfig]);
+    }, [tabs, searchQuery, activeCategory, selectedStatuses, selectedTuning, capoFilter, sortConfig, fileTypeFilter, sortMode]);
 
     const filteredTabs = filteredAndSortedTabs;
     const [isDragging, setIsDragging] = useState(false);
@@ -637,6 +684,33 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                         ))}
                     </div>
 
+                    <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
+
+                    {/* File Type Filter - Only show if we have different types or if filtered */}
+                    {availableFileTypes.length > 1 && (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: 11, color: '#666', marginRight: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Type</span>
+                            {availableFileTypes.map(t => (
+                                <button
+                                    key={t.id}
+                                    onClick={() => setFileTypeFilter(t.id as any)}
+                                    style={{
+                                        padding: '4px 10px',
+                                        borderRadius: 12,
+                                        border: '1px solid ' + (fileTypeFilter === t.id ? '#03dac6' : '#444'),
+                                        background: fileTypeFilter === t.id ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
+                                        color: fileTypeFilter === t.id ? '#03dac6' : '#888',
+                                        fontSize: 12,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {availableTunings.length > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
                             <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
@@ -802,7 +876,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                             background: 'rgba(187, 134, 252, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             color: '#bb86fc', flexShrink: 0
                                         }}>
-                                            <Icons.Music size={20} />
+                                            {getFileIcon(tab.name)}
                                         </div>
                                         <span className="tab-name" style={{
                                             fontWeight: 500,

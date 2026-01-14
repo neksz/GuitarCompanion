@@ -18,7 +18,9 @@ import {
     FileText,
     RefreshCw,
     Menu,
-    X
+    X,
+    File,
+    FileAudio
 } from 'lucide-react';
 
 export const Icons = {
@@ -41,5 +43,7 @@ export const Icons = {
     FileText,
     RefreshCw,
     Menu,
-    X
+    X,
+    File,
+    FileAudio
 };
