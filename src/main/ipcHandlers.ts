@@ -4,9 +4,9 @@ import { megaService } from './megaService';
 import { ILoginCredentials } from '../shared/types';
 
 export function setupHandlers() {
-  ipcMain.handle('auth:login', async (_, { email, password, mfaCode }: ILoginCredentials) => {
+  ipcMain.handle('auth:login', async (_, { email, password, keepLoggedIn, mfaCode }: ILoginCredentials) => {
     try {
-      await megaService.login(email, password, mfaCode);
+      await megaService.login(email, password, keepLoggedIn, mfaCode);
       return { success: true };
     } catch (e: any) {
       console.error(e);

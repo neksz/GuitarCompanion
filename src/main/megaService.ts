@@ -63,7 +63,7 @@ class MegaService {
     return false;
   }
 
-  async login(email: string, pass: string, mfaCode?: string): Promise<void> {
+  async login(email: string, pass: string, keepLoggedIn: boolean, mfaCode?: string): Promise<void> {
     this.storage = await new Promise((resolve, reject) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const options: any = { 
@@ -86,11 +86,15 @@ class MegaService {
     });
 
     if (this.storage) {
-       // Save session state for auto-login
-       // s.toJSON() returns the session data required for Storage.fromJSON()
-       const sessionData = this.storage.toJSON();
-       console.log('Login: Saving session data:', JSON.stringify(sessionData, null, 2));
-       SecureStorage.save(this.SESSION_KEY, JSON.stringify(sessionData)); 
+       // Save session state only if keepLoggedIn is true
+       if (keepLoggedIn) {
+          // s.toJSON() returns the session data required for Storage.fromJSON()
+          const sessionData = this.storage.toJSON();
+          console.log('Login: Saving session data:', JSON.stringify(sessionData, null, 2));
+          SecureStorage.save(this.SESSION_KEY, JSON.stringify(sessionData));
+       } else {
+           console.log('Login: Session not saved (keepLoggedIn=false)');
+       }
        
        await this.ensureFolder();
     }

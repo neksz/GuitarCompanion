@@ -9,13 +9,14 @@ export const Login: React.FC = () => {
     const [mfaCode, setMfaCode] = useState('');
     const [showMfa, setShowMfa] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [keepLoggedIn, setKeepLoggedIn] = useState(true);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         console.log('[Login] Submitting with MFA:', showMfa, 'Code length:', mfaCode?.length);
         try {
-            await login({ email, password, keepLoggedIn: true, mfaCode: showMfa ? mfaCode : undefined });
+            await login({ email, password, keepLoggedIn, mfaCode: showMfa ? mfaCode : undefined });
         } finally {
             setIsSubmitting(false);
         }
@@ -69,6 +70,21 @@ export const Login: React.FC = () => {
                                     placeholder="••••••••"
                                     required
                                 />
+                            </div>
+
+                            <div style={{ margin: '15px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', color: '#fff', fontSize: 14 }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={keepLoggedIn}
+                                        onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                                        style={{ width: 16, height: 16, accentColor: '#bb86fc' }}
+                                    />
+                                    Save credentials for next time
+                                </label>
+                                <div style={{ fontSize: 11, color: '#f44336', marginLeft: 24, fontStyle: 'italic' }}>
+                                    Warning: Do not save if this is not your device.
+                                </div>
                             </div>
                         </>
                     ) : (
