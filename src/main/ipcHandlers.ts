@@ -94,6 +94,16 @@ export function setupHandlers() {
       }
   });
 
+  ipcMain.handle('mega:rename', async (_, { nodeId, newName }) => {
+      try {
+          await megaService.renameFile(nodeId, newName);
+          return { success: true };
+      } catch (e: any) {
+          console.error(e);
+          return { success: false, error: e.message };
+      }
+  });
+
   ipcMain.handle('mega:updateAttributes', async (_, { nodeId, attributes }) => {
       try {
           await megaService.updateAttributes(nodeId, attributes);

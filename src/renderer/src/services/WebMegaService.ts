@@ -242,6 +242,28 @@ export class WebMegaService implements IGlobalApi {
         return { success: false, error: 'File not found' };
     }
 
+    async renameFile(id: string, newName: string): Promise<{ success: boolean; error?: string }> {
+        if (!this.rootFolder || !this.rootFolder.children) {
+            return { success: false, error: 'Not logged in' };
+        }
+
+        const node = this.rootFolder.children.find(f => f.nodeId === id);
+        if (!node) {
+            return { success: false, error: 'File not found' };
+        }
+
+        return new Promise((resolve) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (node as any).rename(newName, (err: any) => {
+                if (err) {
+                    resolve({ success: false, error: err.message });
+                } else {
+                    resolve({ success: true });
+                }
+            });
+        });
+    }
+
     async updateAttributes(id: string, attributes: ITabAttributes): Promise<{ success: boolean; error?: string }> {
         if (!this.rootFolder || !this.rootFolder.children) {
             return { success: false, error: 'Not logged in' };

@@ -328,6 +328,21 @@ class MegaService {
     }
   }
 
+  async renameFile(nodeId: string, newName: string): Promise<void> {
+    if (!this.rootFolder || !this.rootFolder.children) throw new Error("No folder");
+
+    const file = this.rootFolder.children.find(f => f.nodeId === nodeId);
+    if (!file) throw new Error("File not found");
+
+    return new Promise<void>((resolve, reject) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (file as any).rename(newName, (err: any) => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+  }
+
   async updateAttributes(nodeId: string, attributes: ITabAttributes): Promise<void> {
     if (!this.rootFolder || !this.rootFolder.children) throw new Error("No folder");
 

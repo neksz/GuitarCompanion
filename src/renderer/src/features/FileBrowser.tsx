@@ -145,7 +145,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
         e.target.value = '';
     };
 
-    const handleConfirmUpload = async (attributes: ITabAttributes) => {
+    const handleConfirmUpload = async (attributes: ITabAttributes, newFileName?: string) => {
         const currentItem = uploadQueue[currentUploadIndex];
         if (!currentItem) return;
 
@@ -155,7 +155,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                 createdAt: new Date().toISOString()
             };
 
-            const res = await api.uploadFile(currentItem.file, currentItem.path, currentItem.file.name, uploadAttributes);
+            // Use newFileName if provided, otherwise default to file name
+            const finalName = newFileName || currentItem.file.name;
+
+            const res = await api.uploadFile(currentItem.file, currentItem.path, finalName, uploadAttributes);
 
             if (res.success) {
                 // Determine if we have more files
@@ -253,10 +256,20 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     }, [uploadQueue, currentUploadIndex]);
 
     // Confirm Edit
-    const handleConfirmEdit = async (attributes: ITabAttributes) => {
+    const handleConfirmEdit = async (attributes: ITabAttributes, newFileName?: string) => {
         if (!editTab) return;
 
         try {
+            // 1. If name changed, rename file first
+            if (newFileName && newFileName !== editTab.name) {
+                const renameRes = await api.renameFile(editTab.id, newFileName);
+                if (!renameRes.success) {
+                    alert('Rename failed: ' + renameRes.error);
+                    return;
+                }
+            }
+
+            // 2. Update attributes
             const res = await api.updateAttributes(editTab.id, attributes);
             if (res.success) {
                 // Optimistically update or reload
@@ -381,6 +394,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
 
     const filteredAndSortedTabs = React.useMemo(() => {
         let result = tabs.filter(tab => {
+            // Exclude JSON files (like settings.json)
+            if (tab.name.toLowerCase().endsWith('.json')) return false;
+
             const title = tab.name.toLowerCase();
             const tuning = (tab.attributes?.tuning || '').toLowerCase();
             const status = tab.attributes?.status || 'None';
@@ -389,7 +405,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             // 1. Text Search
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
-                if (!title.includes(query) && !tuning.includes(query)) return false;
+                const displayName = (tab.attributes?.displayName || '').toLowerCase();
+                if (!title.includes(query) && !tuning.includes(query) && !displayName.includes(query)) return false;
             }
 
             // 2. Capo Filter
@@ -431,8 +448,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     aValue = a.attributes?.tuning || '';
                     bValue = b.attributes?.tuning || '';
                 } else if (sortConfig.key === 'name') {
-                    aValue = a.name;
-                    bValue = b.name;
+                    aValue = (a.attributes?.displayName || a.name).toLowerCase();
+                    bValue = (b.attributes?.displayName || b.name).toLowerCase();
                 } else if (sortConfig.key === 'capo') {
                     aValue = a.attributes?.capo || 0;
                     bValue = b.attributes?.capo || 0;
@@ -465,7 +482,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     return playedB - playedA; // Most played first
                 } else {
                     // Alphabetical fallback
-                    return a.name.localeCompare(b.name);
+                    const nameA = a.attributes?.displayName || a.name;
+                    const nameB = b.attributes?.displayName || b.name;
+                    return nameA.localeCompare(nameB);
                 }
             });
         }
@@ -598,7 +617,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
 
                     <div className="search-container" style={{ display: 'flex', gap: 10, alignItems: 'center', flex: '1 1 auto', maxWidth: '600px', minWidth: '150px' }}>
                         <div style={{ position: 'relative', width: '100%' }}>
-                            <Icons.Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#666' }} />
+                            <Icons.Search size={16} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#aaa' }} />
                             <input
                                 type="text"
                                 placeholder={`Search ${activeCategory === 'favorites' ? 'favorites' : activeCategory === 'learning' ? 'learning' : 'library'}...`}
@@ -626,7 +645,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                         transform: 'translateY(-50%)',
                                         background: 'transparent',
                                         border: 'none',
-                                        color: '#666',
+                                        color: '#aaa',
                                         cursor: 'pointer',
                                         padding: 0,
                                         display: 'flex',
@@ -731,7 +750,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     {/* File Type Filter - Only show if we have different types or if filtered */}
                     {availableFileTypes.length > 1 && (
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontSize: 11, color: '#666', marginRight: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Type</span>
+                            <span style={{ fontSize: 11, color: '#aaa', marginRight: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Type</span>
                             {availableFileTypes.map(t => (
                                 <button
                                     key={t.id}
@@ -782,7 +801,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
                         <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontSize: 11, color: '#666', marginRight: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Sort by</span>
+                            <span style={{ fontSize: 11, color: '#aaa', marginRight: 4, textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Sort by</span>
                             {[
                                 { id: 'recent', label: 'Recent' },
                                 { id: 'created', label: 'Added' },
@@ -842,7 +861,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             </div>
 
             {filteredTabs.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#666', border: '2px dashed #333', borderRadius: 12, position: 'relative' }}>
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#aaa', border: '2px dashed #333', borderRadius: 12, position: 'relative' }}>
                     <Icons.FileText size={48} style={{ opacity: 0.3, marginBottom: 10 }} />
                     <p>No tabs found. Upload some to get started!</p>
                 </div>
@@ -920,16 +939,21 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                         }}>
                                             {getFileIcon(tab.name)}
                                         </div>
-                                        <span className="tab-name" style={{
-                                            fontWeight: 500,
-                                            fontSize: 14,
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            display: 'block',
-                                            flex: 1,
-                                            minWidth: 0
-                                        }}>{tab.name}</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                                            <span className="tab-name" style={{
+                                                fontWeight: 500,
+                                                fontSize: 14,
+                                                whiteSpace: 'nowrap',
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: 'block'
+                                            }}>{tab.attributes?.displayName || tab.name}</span>
+                                            {tab.attributes?.displayName && (
+                                                <span style={{ fontSize: 11, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {tab.name}
+                                                </span>
+                                            )}
+                                        </div>
 
                                         <button
                                             onClick={(e) => handleToggleFavorite(e, tab)}
@@ -1103,7 +1127,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     batchProgress={{ current: currentUploadIndex + 1, total: uploadQueue.length }}
                     pdfPreview={pdfAnalysis?.previewBase64}
                     suggestedAttributes={pdfAnalysis ? { tuning: pdfAnalysis.tuning, capo: pdfAnalysis.capo } : undefined}
-                    isDuplicate={tabs.some(t => t.name === uploadQueue[currentUploadIndex].file.name)}
+                    existingFileNames={tabs.map(t => t.name)}
                     onSkip={handleSkip}
                 />
             )}
@@ -1113,6 +1137,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     fileName={editTab.name}
                     initialAttributes={editTab.attributes}
                     isEditMode={true}
+                    existingFileNames={tabs.map(t => t.name)}
                     onConfirm={handleConfirmEdit}
                     onCancel={() => setEditTab(null)}
                 />

@@ -13,6 +13,7 @@ const api = {
   downloadFile: (nodeId: string, name: string) => ipcRenderer.invoke('mega:download', { nodeId, name }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   deleteFile: (nodeId: string) => ipcRenderer.invoke('mega:delete', { nodeId }),
+  renameFile: (nodeId: string, newName: string) => ipcRenderer.invoke('mega:rename', { nodeId, newName }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateAttributes: (nodeId: string, attributes: any) => ipcRenderer.invoke('mega:updateAttributes', { nodeId, attributes }),
   getFilePath: (file: File) => webUtils.getPathForFile(file),

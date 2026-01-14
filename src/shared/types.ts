@@ -7,6 +7,7 @@ export interface ITabAttributes {
   artist?: string;
   title?: string;
   timesPlayed?: number;
+  displayName?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
@@ -49,6 +50,7 @@ export interface IGlobalApi {
     getFiles: () => Promise<IGuitarTab[]>;
     uploadFile: (file: File, filePath: string, fileName: string, attributes: ITabAttributes) => Promise<{ success: boolean; error?: string }>;
     deleteFile: (id: string) => Promise<{ success: boolean; error?: string }>;
+    renameFile: (id: string, newName: string) => Promise<{ success: boolean; error?: string }>;
     updateAttributes: (id: string, attributes: ITabAttributes) => Promise<{ success: boolean; error?: string }>;
     getFilePath: (file: File) => string;
     openFile: (id: string, name: string) => Promise<void>;

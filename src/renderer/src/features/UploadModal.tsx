@@ -5,13 +5,13 @@ import { Icons } from '../components/Icons';
 interface UploadModalProps {
     fileName: string;
     initialAttributes?: ITabAttributes;
-    onConfirm: (attributes: ITabAttributes) => Promise<void> | void;
+    onConfirm: (attributes: ITabAttributes, newFileName?: string) => Promise<void> | void;
     onCancel: () => void;
     isEditMode?: boolean;
     batchProgress?: { current: number, total: number };
     pdfPreview?: string | null;
     suggestedAttributes?: { tuning?: string, capo?: number };
-    isDuplicate?: boolean;
+    existingFileNames?: string[];
     onSkip?: () => void;
 }
 
@@ -24,7 +24,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     batchProgress,
     pdfPreview,
     suggestedAttributes,
-    isDuplicate = false,
+    existingFileNames = [],
     onSkip
 }) => {
     const [tuning, setTuning] = useState('');
@@ -33,6 +33,24 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     const [isFavorite, setIsFavorite] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
+    const [currentFileName, setCurrentFileName] = useState(() => {
+        const lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex !== -1) {
+            return fileName.substring(0, lastDotIndex);
+        }
+        return fileName;
+    });
+
+    // Derived extension
+    const fileExtension = React.useMemo(() => {
+        const lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex !== -1) {
+            return fileName.substring(lastDotIndex);
+        }
+        return '';
+    }, [fileName]);
+
+    const [displayName, setDisplayName] = useState('');
 
     useEffect(() => {
         if (initialAttributes) {
@@ -40,6 +58,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
             setCapo(initialAttributes.capo !== undefined ? initialAttributes.capo : '');
             setStatus(initialAttributes.status as any || 'None');
             setIsFavorite(!!initialAttributes.isFavorite);
+            setDisplayName(initialAttributes.displayName || '');
         } else if (suggestedAttributes) {
             // Use suggested attributes from PDF analysis
             if (suggestedAttributes.tuning) {
@@ -51,6 +70,13 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         }
     }, [initialAttributes, suggestedAttributes]);
 
+    // Check for duplicates based on currentFileName
+    // If IS EDIT MODE, we exclude the original fileName from duplicate check (case insensitive check usually good but let's stick to exact for now)
+    // Actually if we rename to same name it's fine.
+    // Check for duplicates based on currentFileName + extension
+    const fullCurrentFileName = currentFileName + fileExtension;
+    const isDuplicate = existingFileNames.includes(fullCurrentFileName) && fullCurrentFileName !== fileName;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (isSubmitting) return;
@@ -61,8 +87,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 tuning: tuning || 'Standard',
                 capo: capo === '' ? 0 : Number(capo),
                 status,
-                isFavorite
-            });
+                isFavorite,
+                displayName: displayName || undefined
+            }, fullCurrentFileName !== fileName ? fullCurrentFileName : undefined);
         } finally {
             // Note: If onConfirm closes the modal, this component will unmount
             setIsSubmitting(false);
@@ -161,7 +188,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                                     }}
                                 />
                             </div>
-                            <span style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>
+                            <span style={{ color: '#aaa', fontSize: 11, fontStyle: 'italic' }}>
                                 Click to enlarge
                             </span>
                         </div>
@@ -188,9 +215,62 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                             )}
                         </div>
 
-                        <p style={{ color: '#ccc', marginBottom: isDuplicate ? 8 : 20, wordBreak: 'break-all', fontSize: 13 }}>
-                            File: <span style={{ color: '#fff' }}>{fileName}</span>
-                        </p>
+                        <div style={{ marginBottom: 20 }}>
+                            <label style={{ display: 'block', color: '#aaa', marginBottom: 6, fontSize: 14 }}>File Name</label>
+                            <div style={{ display: 'flex', alignItems: 'stretch' }}>
+                                <input
+                                    type="text"
+                                    value={currentFileName}
+                                    onChange={(e) => setCurrentFileName(e.target.value)}
+                                    placeholder="Enter file name"
+                                    style={{
+                                        flex: 1,
+                                        padding: '10px', backgroundColor: '#2b2b36',
+                                        border: '1px solid ' + (isDuplicate ? '#f44336' : '#444'),
+                                        borderRight: 'none',
+                                        borderTopLeftRadius: 4,
+                                        borderBottomLeftRadius: 4,
+                                        color: '#fff',
+                                        fontSize: 14,
+                                        boxSizing: 'border-box'
+                                    }}
+                                />
+                                <div style={{
+                                    padding: '10px 12px',
+                                    backgroundColor: '#2b2b36',
+                                    border: '1px solid ' + (isDuplicate ? '#f44336' : '#444'),
+                                    borderLeft: '1px dashed #444',
+                                    borderTopRightRadius: 4,
+                                    borderBottomRightRadius: 4,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    color: '#888',
+                                    fontSize: 14,
+                                    userSelect: 'none'
+                                }}>
+                                    {fileExtension}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: 20 }}>
+                            <label style={{ display: 'block', color: '#aaa', marginBottom: 6, fontSize: 14 }}>Display Name (Optional)</label>
+                            <input
+                                type="text"
+                                value={displayName}
+                                onChange={(e) => setDisplayName(e.target.value)}
+                                placeholder="Enter display name (shown in list)"
+                                style={{
+                                    width: '100%', padding: '10px', backgroundColor: '#2b2b36',
+                                    border: '1px solid #444',
+                                    borderRadius: 4, color: '#fff',
+                                    boxSizing: 'border-box'
+                                }}
+                            />
+                            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                                This name will be shown in the UI instead of the file name.
+                            </div>
+                        </div>
 
                         {isDuplicate && (
                             <div style={{
@@ -320,15 +400,15 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                                     )}
                                     <button
                                         type="submit"
-                                        disabled={isSubmitting || isDuplicate}
+                                        disabled={isSubmitting || isDuplicate || !currentFileName.trim()}
                                         style={{
                                             padding: '10px 20px',
-                                            backgroundColor: (isSubmitting || isDuplicate) ? '#555' : '#bb86fc',
+                                            backgroundColor: (isSubmitting || isDuplicate || !currentFileName.trim()) ? '#555' : '#bb86fc',
                                             border: 'none', borderRadius: 4,
                                             color: isDuplicate ? '#888' : '#000',
                                             fontWeight: 'bold',
-                                            cursor: (isSubmitting || isDuplicate) ? 'not-allowed' : 'pointer',
-                                            opacity: (isSubmitting || isDuplicate) ? 0.7 : 1,
+                                            cursor: (isSubmitting || isDuplicate || !currentFileName.trim()) ? 'not-allowed' : 'pointer',
+                                            opacity: (isSubmitting || isDuplicate || !currentFileName.trim()) ? 0.7 : 1,
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: 8
