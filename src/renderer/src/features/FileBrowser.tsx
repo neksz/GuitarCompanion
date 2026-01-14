@@ -19,7 +19,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
     const [selectedTuning, setSelectedTuning] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | null }>({ key: '', direction: null });
-    const [sortMode, setSortMode] = useState<'alpha' | 'created' | 'recent'>('alpha');
+    const [sortMode, setSortMode] = useState<'alpha' | 'created' | 'recent' | 'played'>('alpha');
     const [capoFilter, setCapoFilter] = useState('');
     // Store regular File object for Web, and path for Electron
     const [uploadQueue, setUploadQueue] = useState<{ file: File, path: string }[]>([]);
@@ -247,7 +247,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
             // Update last accessed timestamp
             await api.updateAttributes(tab.id, {
                 ...tab.attributes,
-                lastAccessed: new Date().toISOString()
+                lastAccessed: new Date().toISOString(),
+                timesPlayed: (tab.attributes?.timesPlayed || 0) + 1
             });
 
             // Note: We don't wait for the above to finish before opening (saves time),
@@ -390,6 +391,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     const accessB = b.attributes?.lastAccessed || b.attributes?.createdAt || '';
                     if (!accessA && !accessB) return a.name.localeCompare(b.name);
                     return accessB.localeCompare(accessA); // Newest first
+                } else if (sortMode === 'played') {
+                    const playedA = a.attributes?.timesPlayed || 0;
+                    const playedB = b.attributes?.timesPlayed || 0;
+                    if (playedA === playedB) return a.name.localeCompare(b.name);
+                    return playedB - playedA; // Most played first
                 } else {
                     // Alphabetical fallback
                     return a.name.localeCompare(b.name);
@@ -402,6 +408,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
 
     const filteredTabs = filteredAndSortedTabs;
     const [isDragging, setIsDragging] = useState(false);
+
+    const formatDate = (dateString?: string) => {
+        if (!dateString) return '';
+        try {
+            return new Date(dateString).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        } catch (e) {
+            return '';
+        }
+    };
 
     // Global Drag and Drop Handlers
     useEffect(() => {
@@ -655,6 +670,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                             {[
                                 { id: 'recent', label: 'Recent' },
                                 { id: 'created', label: 'Added' },
+                                { id: 'played', label: 'Played' },
                                 { id: 'alpha', label: 'A-Z' }
                             ].map(m => (
                                 <button
@@ -751,7 +767,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                 <th
                                     className="desktop-only"
                                     onClick={() => handleSort('status')}
-                                    style={{ padding: '12px 16px', fontWeight: 600, width: 110, cursor: 'pointer', userSelect: 'none' }}
+                                    style={{
+                                        padding: '12px 16px',
+                                        fontWeight: 600,
+                                        width: ['played', 'created', 'recent'].includes(sortMode) ? 180 : 110,
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                        transition: 'width 0.2s ease-in-out'
+                                    }}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                         Status {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
@@ -822,17 +845,37 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                     </td>
 
                                     <td className="desktop-only" style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                                        {tab.attributes?.status && tab.attributes.status !== 'None' && (
-                                            <span className="status-badge" style={{
-                                                padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                                                background: tab.attributes.status === 'Learned' ? 'rgba(76, 175, 80, 0.2)' :
-                                                    tab.attributes.status === 'Learning' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                                                color: tab.attributes.status === 'Learned' ? '#4caf50' :
-                                                    tab.attributes.status === 'Learning' ? '#ffc107' : '#aaa'
-                                            }}>
-                                                {tab.attributes.status}
-                                            </span>
-                                        )}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            {tab.attributes?.status && tab.attributes.status !== 'None' && (
+                                                <span className="status-badge" style={{
+                                                    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                                                    background: tab.attributes.status === 'Learned' ? 'rgba(76, 175, 80, 0.2)' :
+                                                        tab.attributes.status === 'Learning' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+                                                    color: tab.attributes.status === 'Learned' ? '#4caf50' :
+                                                        tab.attributes.status === 'Learning' ? '#ffc107' : '#aaa'
+                                                }}>
+                                                    {tab.attributes.status}
+                                                </span>
+                                            )}
+
+                                            {sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 && (
+                                                <span style={{ fontSize: 12, color: '#888' }}>
+                                                    {tab.attributes.timesPlayed} play{tab.attributes.timesPlayed !== 1 ? 's' : ''}
+                                                </span>
+                                            )}
+
+                                            {sortMode === 'created' && tab.attributes?.createdAt && (
+                                                <span style={{ fontSize: 12, color: '#888' }}>
+                                                    Added {formatDate(tab.attributes.createdAt)}
+                                                </span>
+                                            )}
+
+                                            {sortMode === 'recent' && tab.attributes?.lastAccessed && (
+                                                <span style={{ fontSize: 12, color: '#888' }}>
+                                                    Viewed {formatDate(tab.attributes.lastAccessed)}
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
 
                                     <td className="cell-actions" style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>

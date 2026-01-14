@@ -6,6 +6,7 @@ export interface ITabAttributes {
   capo?: number;
   artist?: string;
   title?: string;
+  timesPlayed?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
 }
