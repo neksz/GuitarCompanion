@@ -4,7 +4,11 @@
   "description": "A Guitar Companion that uses mega to store guitar tabs that can be filtered and loaded in app wherever you are.",
   "main": "./out/main/index.js",
   "author": "Patrik Czobor",
-  "homepage": "https://electron-vite.org",
+  "homepage": "https://github.com/neksz/GuitarCompanion",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neksz/GuitarCompanion.git"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
