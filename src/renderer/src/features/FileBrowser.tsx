@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { IGuitarTab, ITabAttributes } from '../../../shared/types';
 import { UploadModal } from './UploadModal';
 import { ConfirmationModal } from './ConfirmationModal';
+import { PdfViewer } from './PdfViewer';
 import { Icons } from '../components/Icons';
 import { api } from '../services/api';
 import { analyzePdfInBrowser } from '../utils/browserPdfAnalyzer';
@@ -53,6 +54,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const [editTab, setEditTab] = useState<IGuitarTab | null>(null);
     const [deleteTab, setDeleteTab] = useState<IGuitarTab | null>(null); // State for deletion confirmation
     const [fileTypeFilter, setFileTypeFilter] = useState<'all' | 'pdf' | 'gp' | 'txt'>('all'); // File Type Filter
+    const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
+    const [pdfViewerName, setPdfViewerName] = useState<string>('');
 
     // Extract unique file types from current tabs
     const availableFileTypes = React.useMemo(() => {
@@ -325,11 +328,26 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                 timesPlayed: (tab.attributes?.timesPlayed || 0) + 1
             });
 
-            // Note: We don't wait for the above to finish before opening (saves time),
-            // but we do trigger a backgrounds refresh of the tab list if we want it to reflect in UI.
             loadTabs(false);
 
-            await api.openFile(tab.id, tab.name);
+            const result = await api.openFile(tab.id, tab.name);
+
+            // If we got PDF data back, show the in-app viewer
+            if (result?.data && result?.mimeType === 'application/pdf') {
+                let url = result.data;
+                // Electron returns base64 — convert to blob URL
+                if (!url.startsWith('blob:')) {
+                    const binary = atob(url);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    const blob = new Blob([bytes], { type: 'application/pdf' });
+                    url = URL.createObjectURL(blob);
+                }
+                setPdfViewerUrl(url);
+                setPdfViewerName(tab.attributes?.displayName || tab.name);
+            }
         } catch (e) {
             console.error(e);
             alert('Failed to open file');
@@ -1151,6 +1169,17 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     isDestructive={true}
                     onConfirm={handleConfirmDelete}
                     onCancel={() => setDeleteTab(null)}
+                />
+            )}
+
+            {pdfViewerUrl && (
+                <PdfViewer
+                    url={pdfViewerUrl}
+                    name={pdfViewerName}
+                    onClose={() => {
+                        setPdfViewerUrl(null);
+                        setPdfViewerName('');
+                    }}
                 />
             )}
         </div>

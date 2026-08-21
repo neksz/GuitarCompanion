@@ -17,7 +17,7 @@ declare global {
       checkAuth: () => Promise<boolean>;
       getFiles: () => Promise<IGuitarTab[]>;
       uploadFile: (path: string, name: string, attributes?: ITabAttributes) => Promise<{ success: boolean; error?: string }>;
-      openFile: (nodeId: string, name: string) => Promise<{ success: boolean; error?: string }>;
+      openFile: (nodeId: string, name: string) => Promise<{ success: boolean; data?: string; mimeType?: string; error?: string }>;
       downloadFile: (nodeId: string, name: string) => Promise<{ success: boolean; error?: string; canceled?: boolean }>;
       deleteFile: (nodeId: string) => Promise<{ success: boolean; error?: string }>;
       updateAttributes: (nodeId: string, attributes: ITabAttributes) => Promise<{ success: boolean; error?: string }>;

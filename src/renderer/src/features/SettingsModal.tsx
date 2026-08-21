@@ -125,6 +125,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave })
                             <option value="txt">Text</option>
                         </select>
                     </div>
+
+                    <div style={{ ...formGroupStyle, marginTop: 4 }}>
+                        <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={!!settings.pdfAlwaysFullscreen}
+                                onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setSettings({ ...settings, pdfAlwaysFullscreen: checked });
+                                    try {
+                                        localStorage.setItem('guitar_pdf_always_fullscreen', String(checked));
+                                    } catch {
+                                        // ignore
+                                    }
+                                }}
+                                style={{ width: '16px', height: '16px', accentColor: '#bb86fc', cursor: 'pointer' }}
+                            />
+                            <span>Always open PDF tabs in fullscreen</span>
+                        </label>
+                        <small style={{ color: '#888', fontSize: 11, marginLeft: 26, display: 'block' }}>
+                            Automatically expands PDF viewer to fullscreen when opening a tab
+                        </small>
+                    </div>
                 </div>
 
                 <div style={footerStyle}>

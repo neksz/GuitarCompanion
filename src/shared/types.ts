@@ -41,6 +41,7 @@ export interface ISettings {
   defaultStatusFilter?: string[];
   defaultCapo?: number;
   defaultFileType?: 'all' | 'pdf' | 'gp' | 'txt';
+  pdfAlwaysFullscreen?: boolean;
 }
 
 export interface IGlobalApi {
@@ -53,7 +54,7 @@ export interface IGlobalApi {
     renameFile: (id: string, newName: string) => Promise<{ success: boolean; error?: string }>;
     updateAttributes: (id: string, attributes: ITabAttributes) => Promise<{ success: boolean; error?: string }>;
     getFilePath: (file: File) => string;
-    openFile: (id: string, name: string) => Promise<void>;
+    openFile: (id: string, name: string) => Promise<{ success: boolean; data?: string; mimeType?: string; error?: string }>;
     downloadFile: (id: string, name: string) => Promise<{ success: boolean; canceled?: boolean; error?: string }>;
     analyzePdf?: (filePath: string) => Promise<{ success: boolean; error?: string; data?: { tuning: string; capo: number; previewBase64: string | null } }>;
     getSettings: () => Promise<ISettings>;

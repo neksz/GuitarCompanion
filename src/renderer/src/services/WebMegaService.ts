@@ -308,18 +308,27 @@ export class WebMegaService implements IGlobalApi {
         return ''; // Web doesn't have true paths
     }
 
-    async openFile(id: string, name: string): Promise<void> {
-        if (!this.rootFolder) return;
+    async openFile(id: string, name: string): Promise<{ success: boolean; data?: string; mimeType?: string; error?: string }> {
+        if (!this.rootFolder) return { success: false, error: 'Not logged in' };
         const node = this.rootFolder.children?.find(f => f.nodeId === id);
-        if (!node) return;
+        if (!node) return { success: false, error: 'File not found' };
         
         // Determine MIME type based on file extension
         const mimeType = name.endsWith('.pdf') ? 'application/pdf' : 'text/plain';
         
-        // Download the file and open in new tab
+        // Download the file as a blob
         const blob = await this.downloadToBlob(node, mimeType);
+        
+        // For PDFs, return a blob URL for in-app viewing
+        if (name.toLowerCase().endsWith('.pdf')) {
+            const url = URL.createObjectURL(blob);
+            return { success: true, data: url, mimeType: 'application/pdf' };
+        }
+        
+        // For non-PDF files, open in new tab as before
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank');
+        return { success: true };
     }
 
     async downloadFile(id: string, name: string): Promise<{ success: boolean; canceled?: boolean; error?: string }> {

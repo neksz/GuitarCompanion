@@ -53,11 +53,17 @@ export function setupHandlers() {
           }
           
           const destPath = path.join(cacheDir, name);
-          
-          // Check if file exists, if not download
-          // For now, always download to ensure latest version or unique name logic could be added
           await megaService.downloadFile(nodeId, destPath);
           
+          // For PDFs, return file data as base64 for in-app viewing
+          const isPdf = name.toLowerCase().endsWith('.pdf');
+          if (isPdf) {
+              const fileData = require('fs').readFileSync(destPath);
+              const base64 = fileData.toString('base64');
+              return { success: true, data: base64, mimeType: 'application/pdf' };
+          }
+          
+          // For non-PDF files, open externally as before
           await shell.openPath(destPath);
           return { success: true };
       } catch (e: any) {
