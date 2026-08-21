@@ -14,7 +14,13 @@ asarUnpack:
 win:
   executableName: GuitarCompanion
   icon: resources/guitar-svgrepo-com.png
+  target:
+    - target: nsis
+      arch:
+        - x64
 nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
@@ -40,5 +46,6 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: neksz
+  repo: GuitarCompanion
