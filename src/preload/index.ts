@@ -8,14 +8,18 @@ const api = {
   logout: () => ipcRenderer.invoke('auth:logout'),
   checkAuth: () => ipcRenderer.invoke('auth:check'),
   getFiles: () => ipcRenderer.invoke('mega:files'),
-  uploadFile: (_file: File, path: string, name: string, attributes?: any) => ipcRenderer.invoke('mega:upload', { path, name, attributes }),
+  uploadFile: (_file: File, path: string, name: string, attributes?: any) =>
+    ipcRenderer.invoke('mega:upload', { path, name, attributes }),
   openFile: (nodeId: string, name: string) => ipcRenderer.invoke('mega:open', { nodeId, name }),
-  downloadFile: (nodeId: string, name: string) => ipcRenderer.invoke('mega:download', { nodeId, name }),
+  downloadFile: (nodeId: string, name: string) =>
+    ipcRenderer.invoke('mega:download', { nodeId, name }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   deleteFile: (nodeId: string) => ipcRenderer.invoke('mega:delete', { nodeId }),
-  renameFile: (nodeId: string, newName: string) => ipcRenderer.invoke('mega:rename', { nodeId, newName }),
+  renameFile: (nodeId: string, newName: string) =>
+    ipcRenderer.invoke('mega:rename', { nodeId, newName }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  updateAttributes: (nodeId: string, attributes: any) => ipcRenderer.invoke('mega:updateAttributes', { nodeId, attributes }),
+  updateAttributes: (nodeId: string, attributes: any) =>
+    ipcRenderer.invoke('mega:updateAttributes', { nodeId, attributes }),
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   analyzePdf: (filePath: string) => ipcRenderer.invoke('pdf:analyze', { filePath }),
   getSettings: () => ipcRenderer.invoke('mega:getSettings'),

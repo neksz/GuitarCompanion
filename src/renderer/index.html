@@ -1,18 +1,19 @@
 <!doctype html>
 <html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>Guitar Companion</title>
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' blob: https://*.mega.co.nz https://*.mega.io; frame-src 'self' blob:; object-src 'self' blob:; worker-src 'self' blob:;"
+    />
+  </head>
 
-<head>
-  <meta charset="UTF-8" />
-  <title>Guitar Companion</title>
-  <link rel="icon" type="image/png" href="favicon.png" />
-  <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' blob: https://*.mega.co.nz https://*.mega.io; frame-src 'self' blob:; object-src 'self' blob:; worker-src 'self' blob:;" />
-</head>
-
-<body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.tsx"></script>
-</body>
-
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
