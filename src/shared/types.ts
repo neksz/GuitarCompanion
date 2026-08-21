@@ -7,6 +7,7 @@ export interface ITabAttributes {
   artist?: string;
   title?: string;
   timesPlayed?: number;
+  secondsPlayed?: number;
   displayName?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any;
@@ -35,8 +36,8 @@ export interface IStorageStatus {
 }
 
 export interface ISettings {
-  defaultSortMode: 'alpha' | 'created' | 'recent' | 'played';
-  defaultSortDirection?: 'asc' | 'desc'; 
+  defaultSortMode: 'alpha' | 'created' | 'recent' | 'played' | 'time';
+  defaultSortDirection?: 'asc' | 'desc';
   defaultTuning?: string;
   defaultStatusFilter?: string[];
   defaultCapo?: number;

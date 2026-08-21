@@ -18,7 +18,8 @@ import {
     Flame,
     RotateCw,
     X,
-    Music
+    Music,
+    Clock
 } from 'lucide-react';
 
 // Configure PDF.js worker
@@ -27,7 +28,22 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 interface PdfViewerProps {
     url: string;
     name: string;
-    onClose: () => void;
+    initialSecondsPlayed?: number;
+    onClose: (elapsedSeconds?: number) => void;
+}
+
+function formatSessionTimer(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatTotalTime(totalSeconds: number): string {
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
 }
 
 type LayoutMode = 'double' | 'single' | 'scroll';
@@ -192,7 +208,18 @@ const PdfPage: React.FC<PdfPageProps> = ({
     );
 };
 
-export const PdfViewer: React.FC<PdfViewerProps> = ({ url, name, onClose }) => {
+export const PdfViewer: React.FC<PdfViewerProps> = ({ url, name, initialSecondsPlayed = 0, onClose }) => {
+    const startTimeRef = useRef<number>(Date.now());
+    const [sessionSeconds, setSessionSeconds] = useState<number>(0);
+
+    // Live session timer
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setSessionSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
     const [pdf, setPdf] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
     const [numPages, setNumPages] = useState<number>(0);
     const [loading, setLoading] = useState<boolean>(true);
@@ -313,7 +340,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url, name, onClose }) => {
         if (document.fullscreenElement) {
             document.exitFullscreen?.().catch(() => {});
         }
-        onClose();
+        const elapsed = Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000));
+        onClose(elapsed);
     }, [onClose]);
 
     // Load PDF Document
@@ -549,6 +577,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ url, name, onClose }) => {
                     <div className="pdf-doc-badge">
                         <Music size={14} className="pdf-badge-icon" />
                         <span>PDF TAB</span>
+                    </div>
+                    <div
+                        className="pdf-timer-badge"
+                        title={`Session Practice: ${formatSessionTimer(sessionSeconds)}${initialSecondsPlayed ? ` | Total Playtime: ${formatTotalTime(initialSecondsPlayed + sessionSeconds)}` : ''}`}
+                    >
+                        <Clock size={12} />
+                        <span>{formatSessionTimer(sessionSeconds)}</span>
                     </div>
                     <h2 className="pdf-doc-title" title={cleanTitle}>
                         {cleanTitle}

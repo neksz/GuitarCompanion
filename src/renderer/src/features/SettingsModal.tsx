@@ -77,9 +77,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave })
                             style={inputStyle}
                         >
                             <option value="alpha">Alphabetical (A-Z)</option>
+                            <option value="time">Practice Time (Most Time)</option>
+                            <option value="played">Most Played (Times Opened)</option>
                             <option value="recent">Recently Accessed</option>
                             <option value="created">Recently Added</option>
-                            <option value="played">Most Played</option>
                         </select>
                     </div>
 

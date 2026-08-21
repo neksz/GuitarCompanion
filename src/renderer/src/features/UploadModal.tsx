@@ -84,6 +84,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         setIsSubmitting(true);
         try {
             await onConfirm({
+                ...initialAttributes,
                 tuning: tuning || 'Standard',
                 capo: capo === '' ? 0 : Number(capo),
                 status,

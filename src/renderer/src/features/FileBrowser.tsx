@@ -45,7 +45,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
     const [selectedTuning, setSelectedTuning] = useState<string>('');
     const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' | null }>({ key: '', direction: null });
-    const [sortMode, setSortMode] = useState<'alpha' | 'created' | 'recent' | 'played'>('alpha');
+    const [sortMode, setSortMode] = useState<'alpha' | 'created' | 'recent' | 'played' | 'time'>('alpha');
     const [capoFilter, setCapoFilter] = useState('');
     // Store regular File object for Web, and path for Electron
     const [uploadQueue, setUploadQueue] = useState<{ file: File, path: string }[]>([]);
@@ -56,6 +56,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
     const [fileTypeFilter, setFileTypeFilter] = useState<'all' | 'pdf' | 'gp' | 'txt'>('all'); // File Type Filter
     const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null);
     const [pdfViewerName, setPdfViewerName] = useState<string>('');
+    const [pdfViewerTab, setPdfViewerTab] = useState<IGuitarTab | null>(null);
 
     // Extract unique file types from current tabs
     const availableFileTypes = React.useMemo(() => {
@@ -345,12 +346,39 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     const blob = new Blob([bytes], { type: 'application/pdf' });
                     url = URL.createObjectURL(blob);
                 }
+                setPdfViewerTab(tab);
                 setPdfViewerUrl(url);
                 setPdfViewerName(tab.attributes?.displayName || tab.name);
             }
         } catch (e) {
             console.error(e);
             alert('Failed to open file');
+        }
+    };
+
+    const handleClosePdfViewer = async (elapsedSeconds?: number) => {
+        const activeTab = pdfViewerTab;
+        setPdfViewerUrl(null);
+        setPdfViewerName('');
+        setPdfViewerTab(null);
+
+        if (activeTab && elapsedSeconds && elapsedSeconds > 0) {
+            try {
+                const currentSeconds = activeTab.attributes?.secondsPlayed || 0;
+                const updatedSeconds = currentSeconds + elapsedSeconds;
+
+                console.log(`[Playtime Tracker] Tab "${activeTab.name}" played for ${elapsedSeconds}s. Total: ${updatedSeconds}s`);
+
+                await api.updateAttributes(activeTab.id, {
+                    ...activeTab.attributes,
+                    secondsPlayed: updatedSeconds,
+                    lastAccessed: new Date().toISOString()
+                });
+
+                loadTabs(false);
+            } catch (err) {
+                console.error('[Playtime Tracker] Failed to save playtime in MEGA:', err);
+            }
         }
     };
 
@@ -493,6 +521,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                     const accessB = b.attributes?.lastAccessed || b.attributes?.createdAt || '';
                     if (!accessA && !accessB) return a.name.localeCompare(b.name);
                     return accessB.localeCompare(accessA); // Newest first
+                } else if (sortMode === 'time') {
+                    const timeA = a.attributes?.secondsPlayed || 0;
+                    const timeB = b.attributes?.secondsPlayed || 0;
+                    if (timeA === timeB) return a.name.localeCompare(b.name);
+                    return timeB - timeA; // Most practiced time first
                 } else if (sortMode === 'played') {
                     const playedA = a.attributes?.timesPlayed || 0;
                     const playedB = b.attributes?.timesPlayed || 0;
@@ -512,6 +545,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
 
     const filteredTabs = filteredAndSortedTabs;
     const [isDragging, setIsDragging] = useState(false);
+
+    const formatPlayDuration = (totalSeconds?: number) => {
+        if (!totalSeconds || totalSeconds <= 0) return null;
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        if (hours > 0) return `${hours}h ${minutes}m`;
+        if (minutes > 0) return `${minutes}m ${seconds}s`;
+        return `${seconds}s`;
+    };
 
     const formatDate = (dateString?: string) => {
         if (!dateString) return '';
@@ -823,7 +866,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                             {[
                                 { id: 'recent', label: 'Recent' },
                                 { id: 'created', label: 'Added' },
-                                { id: 'played', label: 'Played' },
+                                { id: 'time', label: 'Time' },
+                                { id: 'played', label: 'Plays' },
                                 { id: 'alpha', label: 'A-Z' }
                             ].map(m => (
                                 <button
@@ -923,7 +967,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                     style={{
                                         padding: '12px 16px',
                                         fontWeight: 600,
-                                        width: ['played', 'created', 'recent'].includes(sortMode) ? 180 : 110,
+                                        width: ['played', 'created', 'recent', 'time'].includes(sortMode) ? 180 : 110,
                                         cursor: 'pointer',
                                         userSelect: 'none',
                                         transition: 'width 0.2s ease-in-out'
@@ -1002,37 +1046,48 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                         {tab.attributes?.capo && tab.attributes.capo > 0 ? `Capo ${tab.attributes.capo}` : '-'}
                                     </td>
 
-                                    <td className="desktop-only" style={{ padding: '14px 16px', whiteSpace: 'nowrap' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                            {tab.attributes?.status && tab.attributes.status !== 'None' && (
-                                                <span className="status-badge" style={{
-                                                    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                                                    background: tab.attributes.status === 'Learned' ? 'rgba(76, 175, 80, 0.2)' :
-                                                        tab.attributes.status === 'Learning' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(255, 255, 255, 0.1)',
-                                                    color: tab.attributes.status === 'Learned' ? '#4caf50' :
-                                                        tab.attributes.status === 'Learning' ? '#ffc107' : '#aaa'
-                                                }}>
-                                                    {tab.attributes.status}
-                                                </span>
-                                            )}
+                                    <td className="desktop-only" style={{ padding: '10px 16px', whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
+                                            {/* Tier 1: Status Tag */}
+                                            {tab.attributes?.status && tab.attributes.status !== 'None' ? (
+                                                <div>
+                                                    <span className="status-badge" style={{
+                                                        display: 'inline-block',
+                                                        padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600,
+                                                        background: tab.attributes.status === 'Learned' ? 'rgba(76, 175, 80, 0.18)' :
+                                                            tab.attributes.status === 'Learning' ? 'rgba(255, 193, 7, 0.18)' : 'rgba(255, 255, 255, 0.08)',
+                                                        color: tab.attributes.status === 'Learned' ? '#4caf50' :
+                                                            tab.attributes.status === 'Learning' ? '#ffc107' : '#aaa'
+                                                    }}>
+                                                        {tab.attributes.status}
+                                                    </span>
+                                                </div>
+                                            ) : null}
 
-                                            {sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 && (
-                                                <span style={{ fontSize: 12, color: '#888' }}>
+                                            {/* Tier 2: Practice Timer / Play Stats */}
+                                            {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 ? (
+                                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#9e9eb0' }} title={`Total practice time: ${formatPlayDuration(tab.attributes.secondsPlayed)}`}>
+                                                    <Icons.Clock size={12} style={{ color: '#bb86fc', flexShrink: 0 }} />
+                                                    <span>{formatPlayDuration(tab.attributes.secondsPlayed)}</span>
+                                                    {sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 && (
+                                                        <span style={{ color: '#666', fontSize: 11 }}>({tab.attributes.timesPlayed}x)</span>
+                                                    )}
+                                                </div>
+                                            ) : sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 ? (
+                                                <div style={{ fontSize: 12, color: '#888' }}>
                                                     {tab.attributes.timesPlayed} play{tab.attributes.timesPlayed !== 1 ? 's' : ''}
-                                                </span>
-                                            )}
-
-                                            {sortMode === 'created' && tab.attributes?.createdAt && (
-                                                <span style={{ fontSize: 12, color: '#888' }}>
+                                                </div>
+                                            ) : sortMode === 'created' && tab.attributes?.createdAt ? (
+                                                <div style={{ fontSize: 11, color: '#777' }}>
                                                     Added {formatDate(tab.attributes.createdAt)}
-                                                </span>
-                                            )}
-
-                                            {sortMode === 'recent' && tab.attributes?.lastAccessed && (
-                                                <span style={{ fontSize: 12, color: '#888' }}>
+                                                </div>
+                                            ) : sortMode === 'recent' && tab.attributes?.lastAccessed ? (
+                                                <div style={{ fontSize: 11, color: '#777' }}>
                                                     Viewed {formatDate(tab.attributes.lastAccessed)}
-                                                </span>
-                                            )}
+                                                </div>
+                                            ) : !tab.attributes?.status || tab.attributes.status === 'None' ? (
+                                                <span style={{ color: '#555', fontSize: 13 }}>-</span>
+                                            ) : null}
                                         </div>
                                     </td>
 
@@ -1088,6 +1143,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                                             <span className="mobile-only-inline">
                                                 {tab.attributes?.capo && tab.attributes.capo > 0 ? `Capo ${tab.attributes.capo}` : 'No Capo'}
                                             </span>
+                                            {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 && (
+                                                <span className="mobile-only-inline" style={{ color: '#888' }}>
+                                                    ⏱ {formatPlayDuration(tab.attributes.secondsPlayed)}
+                                                </span>
+                                            )}
                                             {tab.attributes?.status && tab.attributes.status !== 'None' && (
                                                 <span className="status-badge" style={{
                                                     padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600,
@@ -1176,10 +1236,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ searchQuery = '', acti
                 <PdfViewer
                     url={pdfViewerUrl}
                     name={pdfViewerName}
-                    onClose={() => {
-                        setPdfViewerUrl(null);
-                        setPdfViewerName('');
-                    }}
+                    initialSecondsPlayed={pdfViewerTab?.attributes?.secondsPlayed || 0}
+                    onClose={handleClosePdfViewer}
                 />
             )}
         </div>

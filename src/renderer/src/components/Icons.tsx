@@ -20,7 +20,8 @@ import {
     Menu,
     X,
     File,
-    FileAudio
+    FileAudio,
+    Clock
 } from 'lucide-react';
 
 export const Icons = {
@@ -45,5 +46,6 @@ export const Icons = {
     Menu,
     X,
     File,
-    FileAudio
+    FileAudio,
+    Clock
 };
