@@ -50,13 +50,31 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     return ''
   }, [fileName])
 
+  const isGpFile = React.useMemo(() => {
+    const ext = fileExtension.toLowerCase()
+    return ext === '.gp3' || ext === '.gp4' || ext === '.gp5' || ext === '.gpx' || ext === '.gp'
+  }, [fileExtension])
+
   const [displayName, setDisplayName] = useState('')
+
+  // Sync fileName when prop changes (for batch uploads)
+  useEffect(() => {
+    const lastDotIndex = fileName.lastIndexOf('.')
+    if (lastDotIndex !== -1) {
+      setCurrentFileName(fileName.substring(0, lastDotIndex))
+    } else {
+      setCurrentFileName(fileName)
+    }
+    if (!initialAttributes) {
+      setDisplayName('')
+    }
+  }, [fileName, initialAttributes])
 
   useEffect(() => {
     if (initialAttributes) {
       setTuning(initialAttributes.tuning || 'Standard')
       setCapo(initialAttributes.capo !== undefined ? initialAttributes.capo : '')
-      setStatus((initialAttributes.status as any) || 'None')
+      setStatus((initialAttributes.status as 'To Learn' | 'Learning' | 'Learned' | 'None') || 'None')
       setIsFavorite(!!initialAttributes.isFavorite)
       setDisplayName(initialAttributes.displayName || '')
     } else if (suggestedAttributes) {
@@ -78,7 +96,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const isDuplicate =
     existingFileNames.includes(fullCurrentFileName) && fullCurrentFileName !== fileName
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     if (isSubmitting) return
 
@@ -355,20 +373,38 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#aaa', marginBottom: 6, fontSize: 14 }}>
-                  Tuning
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ color: '#aaa', fontSize: 14 }}>Tuning</label>
+                  {isGpFile && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: '#bb86fc',
+                        marginLeft: 8,
+                        background: 'rgba(187, 134, 252, 0.12)',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontWeight: 500
+                      }}
+                    >
+                      ⚡ Auto-detected from GP
+                    </span>
+                  )}
+                </div>
                 <select
                   value={tuning}
                   onChange={(e) => setTuning(e.target.value)}
+                  disabled={isGpFile}
                   style={{
                     width: '100%',
                     padding: '10px',
-                    backgroundColor: '#2b2b36',
+                    backgroundColor: isGpFile ? '#22222c' : '#2b2b36',
                     border: '1px solid #444',
                     borderRadius: 4,
-                    color: '#fff',
-                    boxSizing: 'border-box'
+                    color: isGpFile ? '#bb86fc' : '#fff',
+                    boxSizing: 'border-box',
+                    cursor: isGpFile ? 'not-allowed' : 'pointer',
+                    opacity: isGpFile ? 0.9 : 1
                   }}
                 >
                   <option value="">Select Tuning...</option>
@@ -376,13 +412,28 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   <option value="Drop D">Drop D (D A D G B E)</option>
                   <option value="Eb Standard">Eb Standard (Eb Ab Db Gb Bb Eb)</option>
                   <option value="D Standard">D Standard (D G C F A D)</option>
+                  <option value="Drop C">Drop C (C G C F A D)</option>
                   <option value="Open D">Open D (D A D F# A D)</option>
                   <option value="Open G">Open G (D G D G B D)</option>
                   <option value="DADGAD">DADGAD</option>
                   <option value="FADGBE">FADGBE</option>
+                  {tuning &&
+                    ![
+                      '',
+                      'Standard',
+                      'Drop D',
+                      'Eb Standard',
+                      'D Standard',
+                      'Drop C',
+                      'Open D',
+                      'Open G',
+                      'DADGAD',
+                      'FADGBE',
+                      'Custom'
+                    ].includes(tuning) && <option value={tuning}>{tuning}</option>}
                   <option value="Custom">Custom</option>
                 </select>
-                {tuning === 'Custom' && (
+                {!isGpFile && tuning === 'Custom' && (
                   <input
                     type="text"
                     placeholder="Enter custom tuning"
@@ -402,24 +453,42 @@ export const UploadModal: React.FC<UploadModalProps> = ({
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', color: '#aaa', marginBottom: 6, fontSize: 14 }}>
-                  Capo Position
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ color: '#aaa', fontSize: 14 }}>Capo Position</label>
+                  {isGpFile && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: '#bb86fc',
+                        marginLeft: 8,
+                        background: 'rgba(187, 134, 252, 0.12)',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontWeight: 500
+                      }}
+                    >
+                      ⚡ Auto-detected from GP
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number"
                   min="0"
                   max="12"
                   value={capo}
                   onChange={(e) => setCapo(e.target.value === '' ? '' : Number(e.target.value))}
+                  disabled={isGpFile}
                   placeholder="0 (No Capo)"
                   style={{
                     width: '100%',
                     padding: '10px',
-                    backgroundColor: '#2b2b36',
+                    backgroundColor: isGpFile ? '#22222c' : '#2b2b36',
                     border: '1px solid #444',
                     borderRadius: 4,
-                    color: '#fff',
-                    boxSizing: 'border-box'
+                    color: isGpFile ? '#bb86fc' : '#fff',
+                    boxSizing: 'border-box',
+                    cursor: isGpFile ? 'not-allowed' : 'text',
+                    opacity: isGpFile ? 0.9 : 1
                   }}
                 />
               </div>
@@ -430,7 +499,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 </label>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as any)}
+                  onChange={(e) => setStatus(e.target.value as 'To Learn' | 'Learning' | 'Learned' | 'None')}
                   style={{
                     width: '100%',
                     padding: '10px',

@@ -18,7 +18,6 @@ import {
   Flame,
   RotateCw,
   X,
-  Music,
   Clock,
   SlidersHorizontal
 } from 'lucide-react'
@@ -95,18 +94,22 @@ const PdfPage: React.FC<PdfPageProps> = ({
         // Compute optimal fit scale based on viewport size and layout
         let autoScale = 1.0
         const isNarrow = containerWidth < 900
-        const availableH = Math.max(containerHeight - (isNarrow ? 24 : 40), 250)
-        const availableW = Math.max(containerWidth - (isNarrow ? 24 : 60), 280)
+        // Padding inside .pdf-viewer-body: 16px top/bottom (32px total), 20px left/right (40px total)
+        // Include safety margin for card borders, box-shadow and sub-pixel rounding
+        const padV = isNarrow ? 28 : 36
+        const padH = isNarrow ? 28 : 48
+        const availableH = Math.max(containerHeight - padV - 16, 200)
+        const availableW = Math.max(containerWidth - padH - 16, 200)
 
         if (layout === 'double') {
           // On narrow screens (< 900px), double layout behaves like stacked or single fit width
           if (isNarrow) {
-            const scaleW = (containerWidth - 24) / unscaledViewport.width
-            const scaleH = (availableH - 20) / unscaledViewport.height
+            const scaleW = (availableW - 12) / unscaledViewport.width
+            const scaleH = (availableH - 12) / unscaledViewport.height
             autoScale = Math.min(scaleW, scaleH)
           } else {
-            // Two pages side-by-side on desktop
-            const targetWidth = (availableW - 32) / 2
+            // Two pages side-by-side on desktop (with 18px gap between them)
+            const targetWidth = (availableW - 20) / 2
             const scaleH = availableH / unscaledViewport.height
             const scaleW = targetWidth / unscaledViewport.width
             autoScale = Math.min(scaleH, scaleW)
@@ -117,7 +120,7 @@ const PdfPage: React.FC<PdfPageProps> = ({
           autoScale = Math.min(scaleH, scaleW)
         } else {
           // Scroll layout: fit width
-          autoScale = (availableW - (isNarrow ? 12 : 40)) / unscaledViewport.width
+          autoScale = (availableW - (isNarrow ? 12 : 32)) / unscaledViewport.width
         }
 
         // Minimum readable scale
@@ -640,10 +643,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       <header className="pdf-viewer-header">
         {/* Left Section: Title & Meta */}
         <div className="pdf-header-left">
-          <div className="pdf-doc-badge">
-            <Music size={14} className="pdf-badge-icon" />
-            <span className="badge-text">PDF TAB</span>
-          </div>
           <div
             className="pdf-timer-badge"
             title={`Session Practice: ${formatSessionTimer(sessionSeconds)}${initialSecondsPlayed ? ` | Total Playtime: ${formatTotalTime(initialSecondsPlayed + sessionSeconds)}` : ''}`}
@@ -968,7 +967,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       {/* Main PDF Content Canvas Viewport */}
       <main
         ref={viewerBodyRef}
-        className={`pdf-viewer-body layout-${layout}`}
+        className={`pdf-viewer-body layout-${layout} ${zoom <= 1.0 && layout !== 'scroll' ? 'no-scroll' : ''}`}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >

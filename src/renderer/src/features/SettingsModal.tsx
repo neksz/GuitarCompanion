@@ -155,10 +155,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave })
                 }}
                 style={{ width: '16px', height: '16px', accentColor: '#bb86fc', cursor: 'pointer' }}
               />
-              <span>Always open PDF tabs in fullscreen</span>
+              <span>Always open tabs in fullscreen</span>
             </label>
             <small style={{ color: '#888', fontSize: 11, marginLeft: 26, display: 'block' }}>
-              Automatically expands PDF viewer to fullscreen when opening a tab
+              Automatically expands PDF and Guitar Pro viewers to fullscreen when opening a tab
             </small>
           </div>
         </div>

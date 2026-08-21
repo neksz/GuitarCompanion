@@ -1,6 +1,7 @@
 import { resolve } from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { alphaTab } from '@coderline/alphatab-vite'
 
 export default defineConfig({
   base: '/GuitarCompanion/',
@@ -16,5 +17,5 @@ export default defineConfig({
       '@shared': resolve(__dirname, 'src/shared')
     }
   },
-  plugins: [react()]
+  plugins: [react(), alphaTab()]
 })

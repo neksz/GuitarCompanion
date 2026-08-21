@@ -7,9 +7,42 @@ import {
   ISettings
 } from '../../../shared/types'
 
+interface IMegaNode {
+  nodeId?: string
+  name?: string
+  size?: number
+  directory?: boolean
+  children?: IMegaNode[]
+  root?: IMegaNode
+  reload?: (cb: (err?: Error | null) => void) => void
+  setAttributes?: (attrs: Record<string, unknown>, cb: (err?: Error | null) => void) => void
+  upload?: (options: { name: string; size: number }, data: Uint8Array) => IMegaUploadStream
+  delete?: (cb?: (err?: Error | null) => void) => Promise<void>
+  rename?: (newName: string, cb: (err?: Error | null) => void) => void
+  download?: (options?: Record<string, unknown>) => NodeJS.ReadableStream
+  attributes?: ITabAttributes
+}
+
+interface IMegaUploadStream {
+  on(event: 'complete', listener: (file?: IMegaNode) => void): this
+  on(event: 'error', listener: (err: Error) => void): this
+}
+
+interface IWindowFileSystem {
+  showSaveFilePicker?: (options: {
+    suggestedName?: string
+    types?: Array<{ description: string; accept: Record<string, string[]> }>
+  }) => Promise<{
+    createWritable: () => Promise<{
+      write: (data: Blob) => Promise<void>
+      close: () => Promise<void>
+    }>
+  }>
+}
+
 export class WebMegaService implements IGlobalApi {
   private storage: Storage | null = null
-  private rootFolder: MegaFile | null = null
+  private rootFolder: IMegaNode | null = null
   private readonly FOLDER_NAME = import.meta.env.DEV ? 'GuitarCompanionDev' : 'GuitarCompanionTabs'
 
   constructor() {
@@ -26,11 +59,16 @@ export class WebMegaService implements IGlobalApi {
             console.log('[WebMegaService] Auto-login successful')
 
             // Check if root is missing and reload (same as Electron version)
-            if (this.storage && !(this.storage as any).root) {
+            const extendedStorage = this.storage as unknown as IMegaNode | null
+            if (extendedStorage && !extendedStorage.root) {
               console.log('[WebMegaService] Root is missing, reloading files...')
               try {
                 await new Promise<void>((res, rej) => {
-                  ;(this.storage as any).reload((err: any) => (err ? rej(err) : res()))
+                  if (extendedStorage.reload) {
+                    extendedStorage.reload((err) => (err ? rej(err) : res()))
+                  } else {
+                    res()
+                  }
                 })
                 console.log('[WebMegaService] Reload successful, root now available')
               } catch (reloadErr) {
@@ -71,12 +109,13 @@ export class WebMegaService implements IGlobalApi {
     }
 
     // Find or create folder
-    const files = this.storage.root.children
+    const files = (this.storage.root as unknown as IMegaNode).children
     this.rootFolder = files?.find((f) => f.name === this.FOLDER_NAME && f.directory) || null
 
     if (!this.rootFolder) {
       console.log('[WebMegaService] Creating GuitarCompanionTabs folder...')
-      this.rootFolder = await this.storage.mkdir(this.FOLDER_NAME)
+      const newFolder = await this.storage.mkdir(this.FOLDER_NAME)
+      this.rootFolder = newFolder as unknown as IMegaNode
     } else {
       console.log('[WebMegaService] GuitarCompanionTabs folder found')
     }
@@ -97,17 +136,12 @@ export class WebMegaService implements IGlobalApi {
           this.rootFolder = null
         }
 
-        const storageOpts: any = {
+        const storageOpts = {
           email: creds.email,
           password: creds.password,
           keepalive: true,
-          userAgent: 'GuitarCompanionWeb/1.0'
-        }
-
-        // Add MFA code if provided
-        if (creds.mfaCode) {
-          console.log('[WebMegaService] MFA code provided, adding to login request')
-          storageOpts.secondFactorCode = creds.mfaCode.trim()
+          userAgent: 'GuitarCompanionWeb/1.0',
+          ...(creds.mfaCode ? { secondFactorCode: creds.mfaCode.trim() } : {})
         }
 
         console.log('[WebMegaService] Creating new Storage instance')
@@ -142,10 +176,11 @@ export class WebMegaService implements IGlobalApi {
             this.storage = null
             resolve({ success: false, error: err.message })
           })
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('[WebMegaService] Exception during login', error)
         this.storage = null
-        resolve({ success: false, error: error.message })
+        const msg = error instanceof Error ? error.message : 'Unknown login error'
+        resolve({ success: false, error: msg })
       }
     })
   }
@@ -167,14 +202,16 @@ export class WebMegaService implements IGlobalApi {
 
     return this.rootFolder.children
       .map((f) => {
-        const rawAttrs = (f as any).attributes
-        const attrs = rawAttrs || {}
+        const attrs = f.attributes || {}
+        const ext = (f.name || '').split('.').pop()?.toLowerCase() || 'other'
+        const tabType: IGuitarTab['type'] =
+          ext === 'pdf' || ext === 'gp5' || ext === 'txt' ? ext : 'other'
 
         return {
           id: f.nodeId || '',
           name: f.name || 'Unknown',
           size: f.size || 0,
-          type: (f.name || '').split('.').pop() as any,
+          type: tabType,
           attributes: attrs,
           downloadUrl: ''
         }
@@ -194,9 +231,15 @@ export class WebMegaService implements IGlobalApi {
       console.log('[WebMegaService] Starting upload...', fileName)
       const arrayBuffer = await file.arrayBuffer()
       const buffer = new Uint8Array(arrayBuffer)
+      const folderNode = this.rootFolder
 
       return new Promise((resolve) => {
-        const upload = (this.rootFolder as any).upload(
+        if (!folderNode.upload) {
+          resolve({ success: false, error: 'Folder upload method unavailable' })
+          return
+        }
+
+        const upload = folderNode.upload(
           {
             name: fileName,
             size: file.size
@@ -204,7 +247,7 @@ export class WebMegaService implements IGlobalApi {
           buffer
         )
 
-        upload.on('complete', async (uploadedFile: any) => {
+        upload.on('complete', async (uploadedFile?: IMegaNode) => {
           console.log('[WebMegaService] Upload complete')
 
           // Set attributes if provided
@@ -214,8 +257,8 @@ export class WebMegaService implements IGlobalApi {
               let f = uploadedFile
               if (!f) {
                 // Reload folder to find the new file
-                if ((this.rootFolder as any).reload) {
-                  await new Promise<void>((res) => (this.rootFolder as any).reload(res))
+                if (folderNode.reload) {
+                  await new Promise<void>((res) => folderNode.reload?.(() => res()))
                 }
                 f = this.rootFolder?.children?.find((child) => child.name === fileName)
               }
@@ -223,12 +266,14 @@ export class WebMegaService implements IGlobalApi {
               if (f && f.setAttributes) {
                 console.log('[WebMegaService] Setting attributes...', attributes)
                 await new Promise<void>((res, rej) => {
-                  f.setAttributes(attributes, (err: any) => (err ? rej(err) : res()))
+                  f?.setAttributes?.(attributes as Record<string, unknown>, (err) =>
+                    err ? rej(err) : res()
+                  )
                 })
 
                 // One final reload to ensure UI sees the attributes
-                if ((this.rootFolder as any).reload) {
-                  await new Promise<void>((res) => (this.rootFolder as any).reload(res))
+                if (folderNode.reload) {
+                  await new Promise<void>((res) => folderNode.reload?.(() => res()))
                 }
                 console.log('[WebMegaService] Attributes set successfully')
               }
@@ -240,14 +285,15 @@ export class WebMegaService implements IGlobalApi {
           resolve({ success: true })
         })
 
-        upload.on('error', (err: any) => {
+        upload.on('error', (err: Error) => {
           console.error('[WebMegaService] Upload error:', err)
           resolve({ success: false, error: err.message })
         })
       })
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[WebMegaService] Upload exception:', e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : 'Unknown upload error'
+      return { success: false, error: msg }
     }
   }
 
@@ -255,8 +301,8 @@ export class WebMegaService implements IGlobalApi {
     if (!this.rootFolder) return { success: false, error: 'Not logged in' }
 
     const node = this.rootFolder.children?.find((f) => f.nodeId === id)
-    if (node) {
-      await (node as any).delete()
+    if (node && node.delete) {
+      await node.delete()
       return { success: true }
     }
     return { success: false, error: 'File not found' }
@@ -268,13 +314,12 @@ export class WebMegaService implements IGlobalApi {
     }
 
     const node = this.rootFolder.children.find((f) => f.nodeId === id)
-    if (!node) {
+    if (!node || !node.rename) {
       return { success: false, error: 'File not found' }
     }
 
     return new Promise((resolve) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(node as any).rename(newName, (err: any) => {
+      node.rename?.(newName, (err) => {
         if (err) {
           resolve({ success: false, error: err.message })
         } else {
@@ -297,19 +342,20 @@ export class WebMegaService implements IGlobalApi {
       return { success: false, error: 'File not found' }
     }
 
+    const folderNode = this.rootFolder
+
     return new Promise((resolve) => {
-      const f = node as any
-      if (f.setAttributes) {
-        f.setAttributes(attributes, (err: any) => {
+      if (node.setAttributes) {
+        node.setAttributes(attributes as Record<string, unknown>, (err) => {
           if (err) {
             console.error('[WebMegaService] Error setting attributes:', err)
             resolve({ success: false, error: err.message })
           } else {
             console.log('[WebMegaService] Attributes updated successfully')
             // Reload folder to refresh cache (like Electron version)
-            if ((this.rootFolder as any).reload) {
+            if (folderNode.reload) {
               try {
-                ;(this.rootFolder as any).reload(() => {
+                folderNode.reload(() => {
                   resolve({ success: true })
                 })
               } catch (reloadErr) {
@@ -327,8 +373,11 @@ export class WebMegaService implements IGlobalApi {
     })
   }
 
-  getFilePath(_file: File): string {
-    return '' // Web doesn't have true paths
+  getFilePath(file?: File): string {
+    if (file && 'path' in file && typeof (file as unknown as { path: string }).path === 'string') {
+      return (file as unknown as { path: string }).path
+    }
+    return '' // Web doesn't have true filesystem paths
   }
 
   async openFile(
@@ -340,18 +389,34 @@ export class WebMegaService implements IGlobalApi {
     if (!node) return { success: false, error: 'File not found' }
 
     // Determine MIME type based on file extension
-    const mimeType = name.endsWith('.pdf') ? 'application/pdf' : 'text/plain'
+    const lower = name.toLowerCase()
+    const isPdf = lower.endsWith('.pdf')
+    const isGuitarPro =
+      lower.endsWith('.gp3') ||
+      lower.endsWith('.gp4') ||
+      lower.endsWith('.gp5') ||
+      lower.endsWith('.gpx') ||
+      lower.endsWith('.gp')
+
+    let mimeType = 'text/plain'
+    if (isPdf) mimeType = 'application/pdf'
+    else if (isGuitarPro) mimeType = 'application/x-guitar-pro'
 
     // Download the file as a blob
     const blob = await this.downloadToBlob(node, mimeType)
 
-    // For PDFs, return a blob URL for in-app viewing
-    if (name.toLowerCase().endsWith('.pdf')) {
+    // For PDFs and Guitar Pro files, return a blob URL for in-app viewing
+    if (isPdf) {
       const url = URL.createObjectURL(blob)
       return { success: true, data: url, mimeType: 'application/pdf' }
     }
 
-    // For non-PDF files, open in new tab as before
+    if (isGuitarPro) {
+      const url = URL.createObjectURL(blob)
+      return { success: true, data: url, mimeType: 'application/x-guitar-pro' }
+    }
+
+    // For other non-PDF/GP files, open in new tab as before
     const url = URL.createObjectURL(blob)
     window.open(url, '_blank')
     return { success: true }
@@ -388,10 +453,11 @@ export class WebMegaService implements IGlobalApi {
       console.log('[WebMegaService] Blob created, size:', blob.size, 'type:', blob.type)
 
       // Try File System Access API first (Chrome/Edge)
-      if ('showSaveFilePicker' in window) {
+      const win = window as unknown as IWindowFileSystem
+      if (typeof win.showSaveFilePicker === 'function') {
         try {
           console.log('[WebMegaService] Using File System Access API')
-          const handle = await (window as any).showSaveFilePicker({
+          const handle = await win.showSaveFilePicker({
             suggestedName: name,
             types: [
               {
@@ -405,8 +471,13 @@ export class WebMegaService implements IGlobalApi {
           await writable.close()
           console.log('[WebMegaService] Download via File System Access API successful')
           return { success: true }
-        } catch (err: any) {
-          if (err.name === 'AbortError') {
+        } catch (err: unknown) {
+          if (
+            err &&
+            typeof err === 'object' &&
+            'name' in err &&
+            (err as { name: string }).name === 'AbortError'
+          ) {
             console.log('[WebMegaService] User canceled save dialog')
             return { success: false, canceled: true }
           }
@@ -434,28 +505,34 @@ export class WebMegaService implements IGlobalApi {
 
       console.log('[WebMegaService] Download triggered successfully')
       return { success: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[WebMegaService] downloadFile error:', e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : 'Unknown download error'
+      return { success: false, error: msg }
     }
   }
 
-  private async downloadToBlob(node: MegaFile, mimeType?: string): Promise<Blob> {
+  private async downloadToBlob(node: IMegaNode | MegaFile, mimeType?: string): Promise<Blob> {
     return new Promise((resolve, reject) => {
-      const chunks: Uint8Array[] = []
-      const stream = (node as any).download()
+      const chunks: BlobPart[] = []
+      const megaNode = node as unknown as IMegaNode
+      if (!megaNode.download) {
+        reject(new Error('Download method not available on node'))
+        return
+      }
+
+      const stream = megaNode.download()
 
       stream.on('data', (chunk: Uint8Array) => {
-        chunks.push(chunk)
+        chunks.push(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength) as BlobPart)
       })
 
       stream.on('end', () => {
-        // Convert Uint8Array chunks to proper format and create blob
-        const blob = new Blob(chunks as any, mimeType ? { type: mimeType } : undefined)
+        const blob = new Blob(chunks, mimeType ? { type: mimeType } : undefined)
         resolve(blob)
       })
 
-      stream.on('error', (err: any) => {
+      stream.on('error', (err: Error) => {
         reject(err)
       })
     })
@@ -498,10 +575,10 @@ export class WebMegaService implements IGlobalApi {
       const file = new File([blob], 'settings.json', { type: 'application/json' })
 
       const existing = this.rootFolder.children?.find((f) => f.name === 'settings.json')
-      if (existing) {
+      if (existing && existing.delete) {
         console.log('[WebMegaService] Deleting old settings file...')
         await new Promise<void>((resolve) => {
-          ;(existing as any).delete((err: any) => {
+          existing.delete?.((err) => {
             if (err) console.error('Error deleting old settings:', err)
             resolve()
           })
@@ -509,9 +586,10 @@ export class WebMegaService implements IGlobalApi {
       }
 
       return this.uploadFile(file, '', 'settings.json', {})
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[WebMegaService] Save settings error:', e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : 'Unknown error saving settings'
+      return { success: false, error: msg }
     }
   }
 }

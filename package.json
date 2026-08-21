@@ -27,6 +27,8 @@
     "generate:icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
+    "@coderline/alphatab": "^1.8.4",
+    "@coderline/alphatab-vite": "^1.8.4",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@types/pdf-parse": "^1.1.5",

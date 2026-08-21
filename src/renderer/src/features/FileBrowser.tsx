@@ -3,9 +3,11 @@ import { IGuitarTab, ITabAttributes } from '../../../shared/types'
 import { UploadModal } from './UploadModal'
 import { ConfirmationModal } from './ConfirmationModal'
 import { PdfViewer } from './PdfViewer'
+import { GpViewer } from './GpViewer'
 import { Icons } from '../components/Icons'
 import { api } from '../services/api'
 import { analyzePdfInBrowser } from '../utils/browserPdfAnalyzer'
+import { analyzeGpFile } from '../utils/guitarProAnalyzer'
 
 interface FileBrowserProps {
   searchQuery?: string
@@ -78,6 +80,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null)
   const [pdfViewerName, setPdfViewerName] = useState<string>('')
   const [pdfViewerTab, setPdfViewerTab] = useState<IGuitarTab | null>(null)
+  const [gpViewerData, setGpViewerData] = useState<ArrayBuffer | Uint8Array | string | null>(null)
+  const [gpViewerName, setGpViewerName] = useState<string>('')
+  const [gpViewerTab, setGpViewerTab] = useState<IGuitarTab | null>(null)
 
   // Extract unique file types from current tabs
   const availableFileTypes = React.useMemo(() => {
@@ -235,9 +240,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }
   }
 
-  // PDF Analysis Effect - runs when queue changes or index changes
+  // Tab File Analysis Effect (PDF & Guitar Pro) - runs when queue changes or index changes
   useEffect(() => {
-    const analyzeCurrentPdf = async (): Promise<void> => {
+    const analyzeCurrentFile = async (): Promise<void> => {
       if (uploadQueue.length === 0) {
         setPdfAnalysis(null)
         return
@@ -249,8 +254,31 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         return
       }
 
-      // Check if it's a PDF
-      const isPdf = currentItem.file.name.toLowerCase().endsWith('.pdf')
+      const fileName = currentItem.file.name.toLowerCase()
+      const isPdf = fileName.endsWith('.pdf')
+      const isGp =
+        fileName.endsWith('.gp3') ||
+        fileName.endsWith('.gp4') ||
+        fileName.endsWith('.gp5') ||
+        fileName.endsWith('.gpx') ||
+        fileName.endsWith('.gp')
+
+      if (isGp) {
+        // Guitar Pro analysis - extract exact tuning & capo
+        try {
+          console.log('[FileBrowser] Analyzing Guitar Pro tab:', currentItem.file.name)
+          const result = await analyzeGpFile(currentItem.file)
+          setPdfAnalysis({
+            tuning: result.tuning,
+            capo: result.capo,
+            previewBase64: null
+          })
+        } catch (err) {
+          console.error('[FileBrowser] Guitar Pro analysis error:', err)
+          setPdfAnalysis(null)
+        }
+        return
+      }
 
       if (!isPdf) {
         setPdfAnalysis(null)
@@ -285,7 +313,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       }
     }
 
-    analyzeCurrentPdf()
+    analyzeCurrentFile()
   }, [uploadQueue, currentUploadIndex])
 
   // Confirm Edit
@@ -381,6 +409,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         setPdfViewerTab(tab)
         setPdfViewerUrl(url)
         setPdfViewerName(tab.attributes?.displayName || tab.name)
+      } else if (
+        result?.data &&
+        (result?.mimeType === 'application/x-guitar-pro' || getFileType(tab.name) === 'gp')
+      ) {
+        setGpViewerTab(tab)
+        setGpViewerData(result.data)
+        setGpViewerName(tab.attributes?.displayName || tab.name)
       }
     } catch (e) {
       console.error(e)
@@ -401,6 +436,34 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
         console.log(
           `[Playtime Tracker] Tab "${activeTab.name}" played for ${elapsedSeconds}s. Total: ${updatedSeconds}s`
+        )
+
+        await api.updateAttributes(activeTab.id, {
+          ...activeTab.attributes,
+          secondsPlayed: updatedSeconds,
+          lastAccessed: new Date().toISOString()
+        })
+
+        loadTabs(false)
+      } catch (err) {
+        console.error('[Playtime Tracker] Failed to save playtime in MEGA:', err)
+      }
+    }
+  }
+
+  const handleCloseGpViewer = async (elapsedSeconds?: number): Promise<void> => {
+    const activeTab = gpViewerTab
+    setGpViewerData(null)
+    setGpViewerName('')
+    setGpViewerTab(null)
+
+    if (activeTab && elapsedSeconds && elapsedSeconds > 0) {
+      try {
+        const currentSeconds = activeTab.attributes?.secondsPlayed || 0
+        const updatedSeconds = currentSeconds + elapsedSeconds
+
+        console.log(
+          `[Playtime Tracker] GP Tab "${activeTab.name}" played for ${elapsedSeconds}s. Total: ${updatedSeconds}s`
         )
 
         await api.updateAttributes(activeTab.id, {
@@ -1272,11 +1335,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
                   <td
                     className="desktop-only"
+                    title={tab.attributes?.tuning || 'Standard'}
                     style={{
                       padding: '14px 16px',
                       color: '#888',
                       fontSize: 13,
-                      whiteSpace: 'nowrap'
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: 150
                     }}
                   >
                     {tab.attributes?.tuning || 'Standard'}
@@ -1561,6 +1628,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
       {uploadQueue.length > 0 && uploadQueue[currentUploadIndex] && (
         <UploadModal
+          key={`upload-${currentUploadIndex}-${uploadQueue[currentUploadIndex].file.name}`}
           fileName={uploadQueue[currentUploadIndex].file.name}
           onConfirm={handleConfirmUpload}
           onCancel={handleCancelUpload}
@@ -1602,6 +1670,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           name={pdfViewerName}
           initialSecondsPlayed={pdfViewerTab?.attributes?.secondsPlayed || 0}
           onClose={handleClosePdfViewer}
+        />
+      )}
+
+      {gpViewerData && (
+        <GpViewer
+          data={gpViewerData}
+          name={gpViewerName}
+          initialSecondsPlayed={gpViewerTab?.attributes?.secondsPlayed || 0}
+          onClose={handleCloseGpViewer}
         />
       )}
     </div>

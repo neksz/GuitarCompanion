@@ -70,7 +70,21 @@ export function setupHandlers() {
         return { success: true, data: base64, mimeType: 'application/pdf' }
       }
 
-      // For non-PDF files, open externally as before
+      // For Guitar Pro files, return file data as base64 for in-app viewing
+      const lower = name.toLowerCase()
+      const isGuitarPro =
+        lower.endsWith('.gp3') ||
+        lower.endsWith('.gp4') ||
+        lower.endsWith('.gp5') ||
+        lower.endsWith('.gpx') ||
+        lower.endsWith('.gp')
+      if (isGuitarPro) {
+        const fileData = require('fs').readFileSync(destPath)
+        const base64 = fileData.toString('base64')
+        return { success: true, data: base64, mimeType: 'application/x-guitar-pro' }
+      }
+
+      // For non-PDF/GP files, open externally as before
       await shell.openPath(destPath)
       return { success: true }
     } catch (e: any) {
