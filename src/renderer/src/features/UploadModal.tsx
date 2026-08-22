@@ -31,6 +31,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [capo, setCapo] = useState<number | ''>('')
   const [status, setStatus] = useState<'To Learn' | 'Learning' | 'Learned' | 'None'>('None')
   const [isFavorite, setIsFavorite] = useState(false)
+  const [resetPlaytime, setResetPlaytime] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
   const [currentFileName, setCurrentFileName] = useState(() => {
@@ -104,15 +105,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
     setIsSubmitting(true)
     try {
+      const finalAttributes: ITabAttributes = {
+        ...initialAttributes,
+        tuning: tuning || 'Standard',
+        capo: capo === '' ? 0 : Number(capo),
+        status,
+        isFavorite,
+        displayName: displayName || undefined
+      }
+
+      if (resetPlaytime) {
+        finalAttributes.secondsPlayed = 0
+        finalAttributes.timesPlayed = 0
+      }
+
       await onConfirm(
-        {
-          ...initialAttributes,
-          tuning: tuning || 'Standard',
-          capo: capo === '' ? 0 : Number(capo),
-          status,
-          isFavorite,
-          displayName: displayName || undefined
-        },
+        finalAttributes,
         fullCurrentFileName !== fileName ? fullCurrentFileName : undefined
       )
     } finally {
@@ -521,17 +529,49 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 </select>
               </div>
 
-              <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input
-                  type="checkbox"
-                  id="fav"
-                  checked={isFavorite}
-                  onChange={(e) => setIsFavorite(e.target.checked)}
-                  style={{ width: 16, height: 16 }}
-                />
-                <label htmlFor="fav" style={{ color: '#fff', cursor: 'pointer' }}>
-                  Mark as Favorite
-                </label>
+              <div
+                style={{
+                  marginBottom: 24,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    id="fav"
+                    checked={isFavorite}
+                    onChange={(e) => setIsFavorite(e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  <label htmlFor="fav" style={{ color: '#fff', cursor: 'pointer' }}>
+                    Mark as Favorite
+                  </label>
+                </div>
+
+                {isEditMode && initialAttributes && (initialAttributes.secondsPlayed || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setResetPlaytime(true)}
+                    disabled={resetPlaytime}
+                    style={{
+                      padding: '6px 12px',
+                      backgroundColor: resetPlaytime ? '#2b2b36' : 'transparent',
+                      border: '1px solid ' + (resetPlaytime ? '#444' : '#555'),
+                      borderRadius: 4,
+                      color: resetPlaytime ? '#888' : '#ccc',
+                      fontSize: 12,
+                      cursor: resetPlaytime ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6
+                    }}
+                  >
+                    <Icons.RefreshCw size={12} className={resetPlaytime ? '' : 'hover-spin'} />
+                    {resetPlaytime ? 'Playtime will be reset' : 'Reset Playtime'}
+                  </button>
+                )}
               </div>
 
               <div
