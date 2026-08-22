@@ -81,15 +81,15 @@ export const GpViewer: React.FC<GpViewerProps> = ({
   // Prevent mobile & desktop screen from sleeping / dimming while viewing / playing Guitar Pro score
   useWakeLock(true)
 
-  const startTimeRef = useRef<number>(0)
+  const sessionSecondsRef = useRef<number>(0)
   const [sessionSeconds, setSessionSeconds] = useState<number>(0)
 
-  // Live session timer
+  // Live session timer (only counts when app is active & visible)
   useEffect(() => {
-    startTimeRef.current = Date.now()
     const interval = setInterval(() => {
-      if (startTimeRef.current > 0) {
-        setSessionSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000))
+      if (!document.hidden) {
+        sessionSecondsRef.current += 1
+        setSessionSeconds(sessionSecondsRef.current)
       }
     }, 1000)
     return () => clearInterval(interval)
@@ -728,10 +728,7 @@ export const GpViewer: React.FC<GpViewerProps> = ({
         // ignore
       }
     }
-    const elapsed =
-      startTimeRef.current > 0
-        ? Math.max(1, Math.round((Date.now() - startTimeRef.current) / 1000))
-        : 1
+    const elapsed = Math.max(1, sessionSecondsRef.current)
     onClose(elapsed)
   }, [onClose])
 
