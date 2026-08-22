@@ -11,7 +11,7 @@ export const Login: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [keepLoggedIn, setKeepLoggedIn] = useState(true)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     setIsSubmitting(true)
     console.log('[Login] Submitting with MFA:', showMfa, 'Code length:', mfaCode?.length)
@@ -22,7 +22,7 @@ export const Login: React.FC = () => {
     }
   }
 
-  const handleBack = () => {
+  const handleBack = (): void => {
     setShowMfa(false)
     setMfaCode('')
   }

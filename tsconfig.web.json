@@ -9,6 +9,8 @@
   ],
   "compilerOptions": {
     "composite": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {

@@ -17,11 +17,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    checkAuth()
-  }, [])
-
-  const checkAuth = async () => {
+  const checkAuth = async (): Promise<void> => {
     try {
       const result = await api.checkAuth()
       setIsAuthenticated(result)
@@ -32,7 +28,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
-  const login = async (creds: ILoginCredentials) => {
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const login = async (creds: ILoginCredentials): Promise<void> => {
     setError(null)
     try {
       const res = await api.login(creds)
@@ -41,14 +41,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setError(res.error || 'Login failed')
       }
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      // setIsLoading(false); // Removed as per instruction
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
     }
   }
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     await api.logout()
     setIsAuthenticated(false)
   }
@@ -60,7 +58,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   )
 }
 
-export const useAuth = () => {
+// eslint-disable-next-line react-refresh/only-export-components
+export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext)
   if (!context) throw new Error('useAuth must be used within AuthProvider')
   return context

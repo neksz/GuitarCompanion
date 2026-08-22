@@ -19,7 +19,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadSettings = async (): Promise<void> => {
       try {
         const s = await api.getSettings()
         if (s) {
@@ -34,7 +34,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave })
     loadSettings()
   }, [])
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<void> => {
     setSaving(true)
     try {
       await api.saveSettings(settings)
@@ -73,7 +73,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave })
             <label style={labelStyle}>Default Sort Mode</label>
             <select
               value={settings.defaultSortMode}
-              onChange={(e) => setSettings({ ...settings, defaultSortMode: e.target.value as any })}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  defaultSortMode: e.target.value as ISettings['defaultSortMode']
+                })
+              }
               style={inputStyle}
             >
               <option value="alpha">Alphabetical (A-Z)</option>
@@ -121,7 +126,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSave })
             <label style={labelStyle}>Default File Type</label>
             <select
               value={settings.defaultFileType || 'all'}
-              onChange={(e) => setSettings({ ...settings, defaultFileType: e.target.value as any })}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  defaultFileType: e.target.value as ISettings['defaultFileType']
+                })
+              }
               style={inputStyle}
             >
               <option value="all">All Files</option>

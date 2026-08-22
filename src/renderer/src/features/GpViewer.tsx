@@ -17,8 +17,11 @@ import {
   Clock,
   SlidersHorizontal,
   Layers,
-  Gauge
+  Gauge,
+  Music,
+  Hash
 } from 'lucide-react'
+import { useWakeLock } from '../utils/useWakeLock'
 
 interface GpViewerProps {
   data: ArrayBuffer | Uint8Array | string
@@ -49,6 +52,19 @@ function formatPlaybackTime(millis: number): string {
 }
 
 type ColorMode = 'default' | 'dark' | 'sepia'
+type StaveProfileMode = 'tab' | 'scoretab' | 'score'
+
+function getAlphaTabStaveProfile(mode: StaveProfileMode): alphaTab.StaveProfile {
+  switch (mode) {
+    case 'scoretab':
+      return alphaTab.StaveProfile.ScoreTab
+    case 'score':
+      return alphaTab.StaveProfile.Score
+    case 'tab':
+    default:
+      return alphaTab.StaveProfile.Tab
+  }
+}
 
 interface TrackOption {
   index: number
@@ -62,6 +78,9 @@ export const GpViewer: React.FC<GpViewerProps> = ({
   initialSecondsPlayed = 0,
   onClose
 }) => {
+  // Prevent mobile & desktop screen from sleeping / dimming while viewing / playing Guitar Pro score
+  useWakeLock(true)
+
   const startTimeRef = useRef<number>(0)
   const [sessionSeconds, setSessionSeconds] = useState<number>(0)
 
@@ -141,6 +160,36 @@ export const GpViewer: React.FC<GpViewerProps> = ({
   const [zoom, setZoom] = useState<number>(1.0)
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false)
   const [isMobileToolsOpen, setIsMobileToolsOpen] = useState<boolean>(false)
+
+  // Stave / Notation Profile (defaults to 'tab' to disable pitch / standard notation staff)
+  const [staveProfile, setStaveProfileState] = useState<StaveProfileMode>(() => {
+    try {
+      const saved = localStorage.getItem('guitar_gp_stave_profile')
+      if (saved === 'tab' || saved === 'scoretab' || saved === 'score') {
+        return saved
+      }
+    } catch {
+      // ignore
+    }
+    return 'tab'
+  })
+  const staveProfileRef = useRef<StaveProfileMode>(staveProfile)
+
+  const handleStaveProfileChange = useCallback((mode: StaveProfileMode) => {
+    staveProfileRef.current = mode
+    setStaveProfileState(mode)
+    try {
+      localStorage.setItem('guitar_gp_stave_profile', mode)
+    } catch {
+      // ignore
+    }
+    const api = apiRef.current
+    if (api) {
+      api.settings.display.staveProfile = getAlphaTabStaveProfile(mode)
+      api.updateSettings()
+      api.render()
+    }
+  }, [])
 
   // Color Mode (Stage / Night Theme) with persistent preference
   const [colorMode, setColorModeState] = useState<ColorMode>(() => {
@@ -365,6 +414,7 @@ export const GpViewer: React.FC<GpViewerProps> = ({
         settings.display.stretchForce = 1.0
         settings.display.layoutMode = alphaTab.LayoutMode.Page
         settings.display.padding = [24, 20, 28, 40] // [left, top, right, bottom] padding in px
+        settings.display.staveProfile = getAlphaTabStaveProfile(staveProfileRef.current)
         settings.notation.elements.set(alphaTab.NotationElement.ScoreTitle, true)
         settings.notation.elements.set(alphaTab.NotationElement.ScoreSubTitle, true)
         settings.notation.elements.set(alphaTab.NotationElement.ScoreArtist, true)
@@ -729,6 +779,12 @@ export const GpViewer: React.FC<GpViewerProps> = ({
         case 'I':
           setColorMode((prev) => (prev === 'dark' ? 'default' : 'dark'))
           break
+        case 'n':
+        case 'N':
+          handleStaveProfileChange(
+            staveProfile === 'tab' ? 'scoretab' : staveProfile === 'scoretab' ? 'score' : 'tab'
+          )
+          break
       }
     }
 
@@ -744,7 +800,9 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     handleSpeedChange,
     playbackSpeed,
     isMobileToolsOpen,
-    setColorMode
+    setColorMode,
+    staveProfile,
+    handleStaveProfileChange
   ])
 
   const cleanTitle = scoreTitle || name.replace(/\.(gp[345x]?|gp)$/i, '')
@@ -819,6 +877,34 @@ export const GpViewer: React.FC<GpViewerProps> = ({
             <>
               {/* Desktop Full Tool Controls */}
               <div className="pdf-desktop-tools">
+                {/* Notation / Stave Profile Selector (Pitch vs Tab) */}
+                <div className="pdf-tool-group" title="Notation View">
+                  <button
+                    className={`pdf-tool-btn ${staveProfile === 'tab' ? 'active' : ''}`}
+                    onClick={() => handleStaveProfileChange('tab')}
+                    title="Tablature Only (Pitch Notation Disabled)"
+                  >
+                    <Hash size={15} />
+                    <span className="btn-text">Tab</span>
+                  </button>
+                  <button
+                    className={`pdf-tool-btn ${staveProfile === 'scoretab' ? 'active' : ''}`}
+                    onClick={() => handleStaveProfileChange('scoretab')}
+                    title="Standard Pitch Notation + Tablature"
+                  >
+                    <Music size={15} />
+                    <span className="btn-text">Standard + Tab</span>
+                  </button>
+                  <button
+                    className={`pdf-tool-btn ${staveProfile === 'score' ? 'active' : ''}`}
+                    onClick={() => handleStaveProfileChange('score')}
+                    title="Standard Pitch Notation Only"
+                  >
+                    <Music size={15} />
+                    <span className="btn-text">Standard</span>
+                  </button>
+                </div>
+
                 {/* Reading Theme Selector */}
                 <div className="pdf-tool-group" title="Reading Theme">
                   <button
@@ -944,6 +1030,43 @@ export const GpViewer: React.FC<GpViewerProps> = ({
                 </select>
               </div>
             )}
+
+            {/* Notation View Mode */}
+            <div className="pdf-mobile-tools-section">
+              <div className="pdf-mobile-section-label">Notation View</div>
+              <div className="pdf-mobile-segmented">
+                <button
+                  className={`pdf-mobile-segmented-btn ${staveProfile === 'tab' ? 'active' : ''}`}
+                  onClick={() => {
+                    handleStaveProfileChange('tab')
+                    setIsMobileToolsOpen(false)
+                  }}
+                >
+                  <Hash size={15} />
+                  <span>Tab Only</span>
+                </button>
+                <button
+                  className={`pdf-mobile-segmented-btn ${staveProfile === 'scoretab' ? 'active' : ''}`}
+                  onClick={() => {
+                    handleStaveProfileChange('scoretab')
+                    setIsMobileToolsOpen(false)
+                  }}
+                >
+                  <Music size={15} />
+                  <span>Std + Tab</span>
+                </button>
+                <button
+                  className={`pdf-mobile-segmented-btn ${staveProfile === 'score' ? 'active' : ''}`}
+                  onClick={() => {
+                    handleStaveProfileChange('score')
+                    setIsMobileToolsOpen(false)
+                  }}
+                >
+                  <Music size={15} />
+                  <span>Standard</span>
+                </button>
+              </div>
+            </div>
 
             {/* Theme Mode Selection */}
             <div className="pdf-mobile-tools-section">

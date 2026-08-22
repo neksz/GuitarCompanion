@@ -25,6 +25,8 @@ import {
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
+import { useWakeLock } from '../utils/useWakeLock'
+
 interface PdfViewerProps {
   url: string
   name: string
@@ -230,6 +232,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   initialSecondsPlayed = 0,
   onClose
 }) => {
+  // Prevent mobile & desktop screen from sleeping / dimming while reading PDF
+  useWakeLock(true)
+
   const startTimeRef = useRef<number>(0)
   const [sessionSeconds, setSessionSeconds] = useState<number>(0)
 

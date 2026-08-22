@@ -74,7 +74,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     if (initialAttributes) {
       setTuning(initialAttributes.tuning || 'Standard')
       setCapo(initialAttributes.capo !== undefined ? initialAttributes.capo : '')
-      setStatus((initialAttributes.status as 'To Learn' | 'Learning' | 'Learned' | 'None') || 'None')
+      setStatus(
+        (initialAttributes.status as 'To Learn' | 'Learning' | 'Learned' | 'None') || 'None'
+      )
       setIsFavorite(!!initialAttributes.isFavorite)
       setDisplayName(initialAttributes.displayName || '')
     } else if (suggestedAttributes) {
@@ -499,7 +501,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                 </label>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as 'To Learn' | 'Learning' | 'Learned' | 'None')}
+                  onChange={(e) =>
+                    setStatus(e.target.value as 'To Learn' | 'Learning' | 'Learned' | 'None')
+                  }
                   style={{
                     width: '100%',
                     padding: '10px',

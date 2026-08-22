@@ -68,7 +68,7 @@ export async function analyzePdfInBrowser(file: File): Promise<BrowserPdfAnalysi
     const page = await pdf.getPage(1)
     const textContent = await page.getTextContent()
     const text = textContent.items
-      .map((item: any) => item.str)
+      .map((item) => ('str' in item ? (item as { str: string }).str : ''))
       .join(' ')
       .substring(0, 1000)
 
@@ -89,8 +89,7 @@ export async function analyzePdfInBrowser(file: File): Promise<BrowserPdfAnalysi
       await page.render({
         canvasContext: context,
         viewport: viewport,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        canvas: canvas as any
+        canvas: canvas as unknown as HTMLCanvasElement
       }).promise
 
       result.previewBase64 = canvas.toDataURL('image/png')

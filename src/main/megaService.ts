@@ -1,14 +1,18 @@
-import { Storage, File } from 'megajs'
+import { Storage, MutableFile } from 'megajs'
 import { IGuitarTab, ITabAttributes, ISettings } from '../shared/types'
 import { SecureStorage } from './secureStorage'
-
 import { app } from 'electron'
+import fs from 'fs'
+import path from 'path'
+import os from 'os'
+import crypto from 'crypto'
+import { pipeline } from 'stream/promises'
 
 class MegaService {
   private storage: Storage | null = null
   private readonly SESSION_KEY = 'mega_session'
   private readonly FOLDER_NAME = app.isPackaged ? 'GuitarCompanionTabs' : 'GuitarCompanionDev'
-  private rootFolder: File | null = null
+  private rootFolder: MutableFile | null = null
 
   async init(): Promise<boolean> {
     const session = SecureStorage.get(this.SESSION_KEY)
@@ -16,11 +20,10 @@ class MegaService {
     if (session) {
       try {
         // Attempt to restore session
-        this.storage = await new Promise((resolve, reject) => {
+        this.storage = await new Promise<Storage>((resolve, reject) => {
           try {
             // Parse the stored JSON session data
             const sessionData = JSON.parse(session)
-            // console.log('Init: Restoring from session data:', JSON.stringify(sessionData, null, 2));
 
             // Restore storage from the JSON data
             const s = Storage.fromJSON(sessionData)
@@ -30,14 +33,10 @@ class MegaService {
                 console.log('Init: Session restored successfully')
 
                 // Check if root is missing and attempt reload
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                if (!(s as any).root) {
+                if (!s.root) {
                   console.log('Init: root is missing, attempting to reload files...')
                   try {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    await new Promise<void>((res, rej) =>
-                      (s as any).reload((err: any) => (err ? rej(err) : res()))
-                    )
+                    await s.reload()
                     console.log('Init: Reload successful')
                   } catch (reloadErr) {
                     console.error('Init: Reload failed', reloadErr)
@@ -68,15 +67,12 @@ class MegaService {
   }
 
   async login(email: string, pass: string, keepLoggedIn: boolean, mfaCode?: string): Promise<void> {
-    this.storage = await new Promise((resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const options: any = {
+    this.storage = await new Promise<Storage>((resolve, reject) => {
+      const options = {
         email,
         password: pass,
+        secondFactorCode: mfaCode,
         userAgent: 'GuitarCompanion/1.0'
-      }
-      if (mfaCode) {
-        options.secondFactorCode = mfaCode
       }
 
       try {
@@ -106,12 +102,12 @@ class MegaService {
     }
   }
 
-  async logout() {
+  async logout(): Promise<void> {
     this.storage = null
     SecureStorage.clear(this.SESSION_KEY)
   }
 
-  private async ensureFolder() {
+  private async ensureFolder(): Promise<void> {
     if (!this.storage) return
 
     // Check if root exists
@@ -132,129 +128,100 @@ class MegaService {
     if (!this.rootFolder || !this.rootFolder.children) return []
 
     return this.rootFolder.children.map((f) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rawAttrs = (f as any).attributes
-
-      // Expect attributes to be directly properly or merged
-      const attrs = rawAttrs || {}
+      const attrs = (f.attributes as ITabAttributes) || {}
+      const ext = (f.name || '').split('.').pop()?.toLowerCase()
+      const type: IGuitarTab['type'] =
+        ext === 'pdf'
+          ? 'pdf'
+          : ext === 'gp5' || ext === 'gp' || ext === 'gpx' || ext === 'gp3' || ext === 'gp4'
+            ? 'gp5'
+            : ext === 'txt'
+              ? 'txt'
+              : 'other'
 
       return {
         id: f.nodeId || '',
         name: f.name || 'Unknown',
         size: f.size || 0,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        type: (f.name || '').split('.').pop() as any,
+        type,
         attributes: attrs,
         downloadUrl: ''
       }
     })
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async uploadFile(path: string, name: string, _attributes: ITabAttributes) {
+  async uploadFile(filePath: string, name: string, attributes: ITabAttributes): Promise<void> {
     if (!this.rootFolder) {
       console.error('Upload Error: No root folder')
       throw new Error('No folder')
     }
 
-    console.log('Starting MEGA upload:', { name, path })
+    console.log('Starting MEGA upload:', { name, filePath })
 
-    // megajs upload
     return new Promise<void>((resolve, reject) => {
-      if (!this.rootFolder) return reject('No folder')
+      if (!this.rootFolder) return reject(new Error('No folder'))
 
       let size = 0
       try {
-        size = require('fs').statSync(path).size
+        size = fs.statSync(filePath).size
       } catch (e) {
         console.error('Error reading file size:', e)
         return reject(e)
       }
 
-      // Create read stream
-      let stream: any // Readable stream
+      let stream: fs.ReadStream
       try {
-        const fs = require('fs')
-        stream = fs.createReadStream(path)
+        stream = fs.createReadStream(filePath)
       } catch (e) {
         console.error('Error creating read stream:', e)
         return reject(e)
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const upload = (this.rootFolder as any).upload({ name, size }, stream, (err: any) => {
+      const upload = this.rootFolder.upload({ name, size }, undefined, (err) => {
         if (err) {
           console.error('MEGA Upload Callback Error:', err)
           reject(err)
         }
       })
+      stream.pipe(upload)
 
       upload.on('complete', async () => {
         console.log('MEGA Upload Complete')
 
-        // Find the uploaded file to set attributes
-        // We need to wait a bit or reload? usually upload returns the file instance if we used the Promise API,
-        // but here we used the stream API with events.
-        // The 'complete' event might pass the file object or we might need to find it.
-        // Actually, `upload` itself is a MutableFile which becomes the File.
-
-        if (_attributes && Object.keys(_attributes).length > 0) {
+        if (attributes && Object.keys(attributes).length > 0) {
           try {
-            // Check if upload object has referencing file or is the file
-            // In megajs v1, the upload object emits complete.
-            // Let's try to reload the folder to get the new file
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if ((this.rootFolder as any).reload) {
-              console.log('Reloading folder to find new file...')
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              await new Promise<void>((res) => (this.rootFolder as any).reload(res))
+            if (this.storage) {
+              console.log('Reloading storage to find new file...')
+              await this.storage.reload()
             }
 
-            // Retry logic to find the file
             let attempts = 0
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            let uploadedFile: any = null
+            let uploadedFile: MutableFile | undefined
 
             while (attempts < 3 && !uploadedFile) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              uploadedFile = (this.rootFolder?.children || []).find((f: any) => f.name === name)
+              uploadedFile = (this.rootFolder?.children || []).find((f) => f.name === name)
               if (!uploadedFile) {
                 console.log(`File not found, retrying (${attempts + 1}/3)...`)
                 await new Promise((r) => setTimeout(r, 1000))
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                if ((this.rootFolder as any).reload)
-                  await new Promise<void>((res) => (this.rootFolder as any).reload(res))
+                if (this.storage) {
+                  await this.storage.reload()
+                }
               }
               attempts++
             }
 
             if (uploadedFile) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const f = uploadedFile as any
+              console.log('File found, setting attributes:', attributes)
+              try {
+                await uploadedFile.setAttributes(attributes as unknown as JSON)
+                console.log('Attributes set successfully')
 
-              console.log('File found, setting attributes:', _attributes)
-              if (f.setAttributes) {
-                try {
-                  await new Promise<void>((resolve, reject) => {
-                    f.setAttributes(_attributes, (err: any) => {
-                      if (err) reject(err)
-                      else resolve()
-                    })
-                  })
-                  console.log('Attributes set successfully')
-
-                  // Force reload to ensure attributes are visible in getFiles
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  if ((this.rootFolder as any).reload) {
-                    console.log('Reloading folder to refresh attributes...')
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    await new Promise<void>((res) => (this.rootFolder as any).reload(res))
-                  }
-                } catch (err) {
-                  console.error('Error setting attributes:', err)
+                if (this.storage) {
+                  console.log('Reloading storage to refresh attributes...')
+                  await this.storage.reload()
                 }
-              } else {
-                console.warn('File does not support setAttributes')
+              } catch (err) {
+                console.error('Error setting attributes:', err)
               }
             } else {
               console.error('Could not find uploaded file to set attributes')
@@ -267,30 +234,26 @@ class MegaService {
         resolve()
       })
 
-      upload.on('error', (err: any) => {
+      upload.on('error', (err: unknown) => {
         console.error('MEGA Upload Event Error:', err)
         reject(err)
       })
 
-      upload.on('progress', (stats: any) => {
+      upload.on('progress', (stats: unknown) => {
         console.log('Upload Progress:', stats)
       })
     })
   }
+
   async downloadFile(nodeId: string, destPath: string): Promise<void> {
     if (!this.rootFolder || !this.rootFolder.children) throw new Error('No folder')
 
-    // Find file
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const file = this.rootFolder.children.find((f) => f.nodeId === nodeId)
     if (!file) throw new Error('File not found')
 
-    const { pipeline } = require('stream/promises')
-    const fs = require('fs')
     console.log('[MegaService] downloadFile: starting stream for', nodeId, 'to', destPath)
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const stream = (file as any).download({})
+    const stream = file.download({})
     const writeStream = fs.createWriteStream(destPath)
 
     try {
@@ -301,28 +264,19 @@ class MegaService {
       throw err
     }
   }
+
   async deleteFile(nodeId: string): Promise<void> {
     if (!this.rootFolder || !this.rootFolder.children) throw new Error('No folder')
 
     const file = this.rootFolder.children.find((f) => f.nodeId === nodeId)
     if (!file) throw new Error('File not found')
 
-    await new Promise<void>((resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(file as any).delete((err: any) => {
-        if (err) reject(err)
-        else resolve()
-      })
-    })
+    await file.delete()
 
-    // Verification Loop: Ensure file is gone
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((this.rootFolder as any).reload) {
+    if (this.storage) {
       console.log('Delete: Verifying removal...')
       for (let i = 0; i < 5; i++) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await new Promise<void>((res) => (this.rootFolder as any).reload(res))
-
+        await this.storage.reload()
         const stillExists = this.rootFolder.children.some((f) => f.nodeId === nodeId)
         if (!stillExists) {
           console.log('Delete: File removed successfully')
@@ -340,13 +294,7 @@ class MegaService {
     const file = this.rootFolder.children.find((f) => f.nodeId === nodeId)
     if (!file) throw new Error('File not found')
 
-    return new Promise<void>((resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(file as any).rename(newName, (err: any) => {
-        if (err) reject(err)
-        else resolve()
-      })
-    })
+    await file.rename(newName)
   }
 
   async updateAttributes(nodeId: string, attributes: ITabAttributes): Promise<void> {
@@ -355,32 +303,14 @@ class MegaService {
     const file = this.rootFolder.children.find((f) => f.nodeId === nodeId)
     if (!file) throw new Error('File not found')
 
-    return new Promise<void>((resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const f = file as any
-      if (f.setAttributes) {
-        f.setAttributes(attributes, (err: any) => {
-          if (err) reject(err)
-          else {
-            // Reload folder to refresh cache
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            if ((this.rootFolder as any).reload) {
-              try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                ;(this.rootFolder as any).reload(() => resolve())
-              } catch (reloadErr) {
-                console.error('Reload error after update:', reloadErr)
-                resolve() // Resolve anyway
-              }
-            } else {
-              resolve()
-            }
-          }
-        })
-      } else {
-        reject(new Error('File does not support attributes'))
+    await file.setAttributes(attributes as unknown as JSON)
+    if (this.storage) {
+      try {
+        await this.storage.reload()
+      } catch (reloadErr) {
+        console.error('Reload error after update:', reloadErr)
       }
-    })
+    }
   }
 
   async getSettings(): Promise<ISettings> {
@@ -394,10 +324,6 @@ class MegaService {
     if (!settingsFile || !settingsFile.nodeId) return defaultSettings
 
     try {
-      const fs = require('fs')
-      const path = require('path')
-      const os = require('os')
-      const crypto = require('crypto')
       const uniqueId = crypto.randomBytes(4).toString('hex')
       const tempPath = path.join(os.tmpdir(), `guitar-companion-settings-${uniqueId}.json`)
 
@@ -412,10 +338,11 @@ class MegaService {
       const content = fs.readFileSync(tempPath, 'utf-8')
       console.log('[MegaService] getSettings: Read content length', content.length)
 
-      // Clean up
       try {
         fs.unlinkSync(tempPath)
-      } catch (e) {}
+      } catch {
+        // ignore
+      }
 
       return { ...defaultSettings, ...JSON.parse(content) }
     } catch (e) {
@@ -428,15 +355,11 @@ class MegaService {
     if (!this.rootFolder) throw new Error('No folder')
 
     console.log('Saving settings:', settings)
-    const fs = require('fs')
-    const path = require('path')
-    const os = require('os')
     const tempPath = path.join(os.tmpdir(), 'guitar-companion-settings-upload.json')
 
     fs.writeFileSync(tempPath, JSON.stringify(settings, null, 2))
 
     try {
-      // Delete existing if any
       const existing = this.rootFolder.children?.find((f) => f.name === 'settings.json')
       if (existing && existing.nodeId) {
         await this.deleteFile(existing.nodeId)
@@ -446,7 +369,9 @@ class MegaService {
     } finally {
       try {
         fs.unlinkSync(tempPath)
-      } catch (e) {}
+      } catch {
+        // ignore
+      }
     }
   }
 }

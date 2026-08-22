@@ -1,26 +1,29 @@
 import { ipcMain, app, shell, dialog } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { megaService } from './megaService'
 import { ILoginCredentials } from '../shared/types'
 
-export function setupHandlers() {
+export function setupHandlers(): void {
   ipcMain.handle(
     'auth:login',
     async (_, { email, password, keepLoggedIn, mfaCode }: ILoginCredentials) => {
       try {
         await megaService.login(email, password, keepLoggedIn, mfaCode)
         return { success: true }
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(e)
+        const errorObj = e as { message?: string; code?: number }
+        const msg = errorObj?.message || String(e)
         // Check for MFA error
         if (
-          e.message.includes('Multi-Factor Authentication Required') ||
+          msg.includes('Multi-Factor Authentication Required') ||
           e === -26 ||
-          e.code === -26
+          errorObj?.code === -26
         ) {
           return { success: false, error: 'MFA_REQUIRED' }
         }
-        return { success: false, error: e.message || 'Login failed' }
+        return { success: false, error: msg || 'Login failed' }
       }
     }
   )
@@ -46,17 +49,18 @@ export function setupHandlers() {
       }
       await megaService.uploadFile(tabPath, name, attributes || {})
       return { success: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('IPC mega:upload Exception:', e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 
   ipcMain.handle('mega:open', async (_, { nodeId, name }) => {
     try {
       const cacheDir = path.join(app.getPath('userData'), 'cache')
-      if (!require('fs').existsSync(cacheDir)) {
-        require('fs').mkdirSync(cacheDir)
+      if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir)
       }
 
       const destPath = path.join(cacheDir, name)
@@ -65,7 +69,7 @@ export function setupHandlers() {
       // For PDFs, return file data as base64 for in-app viewing
       const isPdf = name.toLowerCase().endsWith('.pdf')
       if (isPdf) {
-        const fileData = require('fs').readFileSync(destPath)
+        const fileData = fs.readFileSync(destPath)
         const base64 = fileData.toString('base64')
         return { success: true, data: base64, mimeType: 'application/pdf' }
       }
@@ -79,7 +83,7 @@ export function setupHandlers() {
         lower.endsWith('.gpx') ||
         lower.endsWith('.gp')
       if (isGuitarPro) {
-        const fileData = require('fs').readFileSync(destPath)
+        const fileData = fs.readFileSync(destPath)
         const base64 = fileData.toString('base64')
         return { success: true, data: base64, mimeType: 'application/x-guitar-pro' }
       }
@@ -87,9 +91,10 @@ export function setupHandlers() {
       // For non-PDF/GP files, open externally as before
       await shell.openPath(destPath)
       return { success: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Open error:', e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 
@@ -105,9 +110,10 @@ export function setupHandlers() {
         return { success: true }
       }
       return { success: false, canceled: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Download error:', e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 
@@ -115,9 +121,10 @@ export function setupHandlers() {
     try {
       await megaService.deleteFile(nodeId)
       return { success: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 
@@ -125,9 +132,10 @@ export function setupHandlers() {
     try {
       await megaService.renameFile(nodeId, newName)
       return { success: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 
@@ -135,9 +143,10 @@ export function setupHandlers() {
     try {
       await megaService.updateAttributes(nodeId, attributes)
       return { success: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 
@@ -146,9 +155,10 @@ export function setupHandlers() {
       const { analyzePdf } = await import('./pdfAnalyzer')
       const result = await analyzePdf(filePath)
       return { success: true, data: result }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('PDF analysis error:', e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 
@@ -160,9 +170,10 @@ export function setupHandlers() {
     try {
       await megaService.saveSettings(settings)
       return { success: true }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e)
-      return { success: false, error: e.message }
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
     }
   })
 }
