@@ -1609,6 +1609,20 @@ body {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+.gp-btn-player-icon.active {
+  background: rgba(187, 134, 252, 0.22);
+  border-color: rgba(187, 134, 252, 0.6);
+  color: #bb86fc;
+  box-shadow: 0 0 12px rgba(187, 134, 252, 0.35);
+}
+
+.gp-btn-player-icon.active:hover {
+  background: rgba(187, 134, 252, 0.32);
+  border-color: #bb86fc;
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(187, 134, 252, 0.5);
+}
+
 .gp-time-display {
   display: flex;
   align-items: center;

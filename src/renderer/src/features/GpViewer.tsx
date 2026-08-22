@@ -20,7 +20,8 @@ import {
   Gauge,
   Music,
   Hash,
-  Repeat
+  Repeat,
+  Timer
 } from 'lucide-react'
 import { useWakeLock } from '../utils/useWakeLock'
 
@@ -189,7 +190,35 @@ export const GpViewer: React.FC<GpViewerProps> = ({
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0)
   const [volume, setVolume] = useState<number>(1.0)
   const [isMuted, setIsMuted] = useState<boolean>(false)
+  const volumeRef = useRef<number>(1.0)
+  const isMutedRef = useRef<boolean>(false)
   const [isSoundFontLoaded, setIsSoundFontLoaded] = useState<boolean>(false)
+
+  // Metronome State with persistent preference
+  const [isMetronomeActive, setIsMetronomeActiveState] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('guitar_gp_metronome')
+      return saved === 'true'
+    } catch {
+      return false
+    }
+  })
+  const isMetronomeActiveRef = useRef<boolean>(isMetronomeActive)
+
+  const toggleMetronome = useCallback(() => {
+    const nextState = !isMetronomeActiveRef.current
+    isMetronomeActiveRef.current = nextState
+    setIsMetronomeActiveState(nextState)
+    try {
+      localStorage.setItem('guitar_gp_metronome', String(nextState))
+    } catch {
+      // ignore
+    }
+    const api = apiRef.current
+    if (api) {
+      api.metronomeVolume = nextState ? 1 : 0
+    }
+  }, [])
 
   // Display state
   const [zoom, setZoom] = useState<number>(1.0)
@@ -476,6 +505,12 @@ export const GpViewer: React.FC<GpViewerProps> = ({
           setScoreTitle(title)
           setScoreArtist(artist)
 
+          // Apply track volume independently of master so metronome can be heard alone
+          const activeVol = isMutedRef.current ? 0 : volumeRef.current
+          api.changeTrackVolume(score.tracks, activeVol)
+          // Set initial metronome state
+          api.metronomeVolume = isMetronomeActiveRef.current ? 1 : 0
+
           const trackOptions: TrackOption[] = score.tracks.map((t, idx) => ({
             index: idx,
             name: t.name || `Track ${idx + 1}`,
@@ -674,23 +709,29 @@ export const GpViewer: React.FC<GpViewerProps> = ({
 
   const handleVolumeChange = useCallback((newVol: number) => {
     setVolume(newVol)
-    setIsMuted(newVol === 0)
+    volumeRef.current = newVol
+    const muted = newVol === 0
+    setIsMuted(muted)
+    isMutedRef.current = muted
+
     const api = apiRef.current
-    if (api) {
-      api.masterVolume = newVol
+    if (api && api.score) {
+      api.changeTrackVolume(api.score.tracks, newVol)
     }
   }, [])
 
   const handleToggleMute = useCallback(() => {
     const api = apiRef.current
-    if (!api) return
+    if (!api || !api.score) return
     if (isMuted) {
       const restored = volume > 0 ? volume : 0.8
       setIsMuted(false)
-      api.masterVolume = restored
+      isMutedRef.current = false
+      api.changeTrackVolume(api.score.tracks, restored)
     } else {
       setIsMuted(true)
-      api.masterVolume = 0
+      isMutedRef.current = true
+      api.changeTrackVolume(api.score.tracks, 0)
     }
   }, [isMuted, volume])
 
@@ -946,6 +987,10 @@ export const GpViewer: React.FC<GpViewerProps> = ({
             staveProfile === 'tab' ? 'scoretab' : staveProfile === 'scoretab' ? 'score' : 'tab'
           )
           break
+        case 'm':
+        case 'M':
+          toggleMetronome()
+          break
       }
     }
 
@@ -969,7 +1014,8 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     pendingLoopRange,
     handleApplyLoop,
     handleCancelLoopPopup,
-    handleClearLoop
+    handleClearLoop,
+    toggleMetronome
   ])
 
   const cleanTitle = scoreTitle || name.replace(/\.(gp[345x]?|gp)$/i, '')
@@ -1303,6 +1349,27 @@ export const GpViewer: React.FC<GpViewerProps> = ({
               </div>
             </div>
 
+            {/* Metronome Control on Mobile */}
+            <div className="pdf-mobile-tools-section">
+              <div className="pdf-mobile-section-label">Metronome</div>
+              <div className="pdf-mobile-segmented">
+                <button
+                  className={`pdf-mobile-segmented-btn ${!isMetronomeActive ? 'active' : ''}`}
+                  onClick={() => isMetronomeActive && toggleMetronome()}
+                >
+                  <Timer size={15} />
+                  <span>Off</span>
+                </button>
+                <button
+                  className={`pdf-mobile-segmented-btn ${isMetronomeActive ? 'active' : ''}`}
+                  onClick={() => !isMetronomeActive && toggleMetronome()}
+                >
+                  <Timer size={15} />
+                  <span>On (Audible)</span>
+                </button>
+              </div>
+            </div>
+
             {/* Active Loop Controls on Mobile */}
             {isLooping && (
               <div className="pdf-mobile-tools-section">
@@ -1449,8 +1516,17 @@ export const GpViewer: React.FC<GpViewerProps> = ({
               </div>
             </div>
 
-            {/* Right: Volume & SoundFont indicator */}
+            {/* Right: Volume, Metronome & SoundFont indicator */}
             <div className="gp-player-right">
+              <button
+                className={`gp-btn-player-icon ${isMetronomeActive ? 'active' : ''}`}
+                onClick={toggleMetronome}
+                title={`Metronome: ${isMetronomeActive ? 'On' : 'Off'} (M)`}
+                aria-label="Toggle Metronome"
+              >
+                <Timer size={16} />
+              </button>
+
               <div className="gp-volume-wrap">
                 <button
                   className="gp-btn-player-icon"
