@@ -19,7 +19,8 @@ import {
   Layers,
   Gauge,
   Music,
-  Hash
+  Hash,
+  Repeat
 } from 'lucide-react'
 import { useWakeLock } from '../utils/useWakeLock'
 
@@ -72,6 +73,12 @@ interface TrackOption {
   instrument?: string
 }
 
+interface PendingLoopRange {
+  startBeat: alphaTab.model.Beat
+  endBeat: alphaTab.model.Beat
+  label: string
+}
+
 export const GpViewer: React.FC<GpViewerProps> = ({
   data,
   name,
@@ -101,6 +108,34 @@ export const GpViewer: React.FC<GpViewerProps> = ({
   const apiRef = useRef<alphaTab.AlphaTabApi | null>(null)
   const targetScrollTopRef = useRef<number>(0)
   const userInteractingUntilRef = useRef<number>(0)
+
+  // Section Looping State & Refs
+  const [isLooping, setIsLooping] = useState<boolean>(false)
+  const [loopRangeLabel, setLoopRangeLabel] = useState<string>('')
+  const [showLoopPopup, setShowLoopPopup] = useState<boolean>(false)
+  const [loopPopupPosition, setLoopPopupPosition] = useState<{ x: number; y: number }>({
+    x: 0,
+    y: 0
+  })
+  const [pendingLoopRange, setPendingLoopRange] = useState<PendingLoopRange | null>(null)
+
+  const selectionStartBeatRef = useRef<alphaTab.model.Beat | null>(null)
+  const selectionEndBeatRef = useRef<alphaTab.model.Beat | null>(null)
+  const isDraggingRef = useRef<boolean>(false)
+  const lastMousePosRef = useRef<{ x: number; y: number }>({
+    x: typeof window !== 'undefined' ? window.innerWidth / 2 : 400,
+    y: typeof window !== 'undefined' ? window.innerHeight / 2 : 300
+  })
+  const seekToBeatRef = useRef<(beat: alphaTab.model.Beat) => void>(() => {})
+
+  // Track global mouse position for positioning the loop popup
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent): void => {
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('mousemove', handleMouseMove, { passive: true })
+    return () => window.removeEventListener('mousemove', handleMouseMove)
+  }, [])
 
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
@@ -423,6 +458,7 @@ export const GpViewer: React.FC<GpViewerProps> = ({
         settings.notation.elements.set(alphaTab.NotationElement.ScoreWords, true)
         settings.notation.elements.set(alphaTab.NotationElement.GuitarTuning, true)
         settings.player.enablePlayer = true
+        settings.player.enableUserInteraction = false
         settings.player.soundFont = './soundfont/sonivox.sf2'
         // Use our custom RAF gradual smoother instead of default jumpy scrolling
         settings.player.scrollMode = alphaTab.ScrollMode.Off
@@ -470,6 +506,59 @@ export const GpViewer: React.FC<GpViewerProps> = ({
           if (!isMounted) return
           setCurrentTimeMs(args.currentTime)
           setTotalTimeMs(args.endTime)
+        })
+
+        // Beat interaction for click-to-seek and drag-to-loop
+        api.beatMouseDown.on((beat) => {
+          if (!isMounted) return
+          selectionStartBeatRef.current = beat
+          selectionEndBeatRef.current = beat
+          isDraggingRef.current = false
+        })
+
+        api.beatMouseMove.on((beat) => {
+          if (!isMounted) return
+          const startBeat = selectionStartBeatRef.current
+          if (startBeat) {
+            if (beat !== startBeat) {
+              isDraggingRef.current = true
+              selectionEndBeatRef.current = beat
+              api.highlightPlaybackRange(startBeat, beat)
+            }
+          }
+        })
+
+        api.beatMouseUp.on((beat) => {
+          if (!isMounted) return
+          const startBeat = selectionStartBeatRef.current
+          const endBeat = selectionEndBeatRef.current || beat
+
+          if (isDraggingRef.current && startBeat && endBeat && startBeat !== endBeat) {
+            // Range selected
+            const sBar = Math.min(startBeat.voice.bar.index + 1, endBeat.voice.bar.index + 1)
+            const eBar = Math.max(startBeat.voice.bar.index + 1, endBeat.voice.bar.index + 1)
+            const label = sBar === eBar ? `Bar ${sBar}` : `Bars ${sBar}–${eBar}`
+
+            const popupX = Math.max(
+              120,
+              Math.min(window.innerWidth - 120, lastMousePosRef.current.x)
+            )
+            const popupY = Math.max(
+              100,
+              Math.min(window.innerHeight - 100, lastMousePosRef.current.y)
+            )
+
+            setLoopPopupPosition({ x: popupX, y: popupY })
+            setPendingLoopRange({ startBeat, endBeat, label })
+            setShowLoopPopup(true)
+          } else if (startBeat) {
+            // Single click - seek to beat
+            seekToBeatRef.current(startBeat)
+          }
+
+          selectionStartBeatRef.current = null
+          selectionEndBeatRef.current = null
+          isDraggingRef.current = false
         })
 
         api.renderFinished.on(() => {
@@ -605,6 +694,64 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     }
   }, [isMuted, volume])
 
+  const seekToBeat = useCallback((beat: alphaTab.model.Beat) => {
+    const api = apiRef.current
+    if (!api) return
+    if (api.tickCache) {
+      const tickCache = api.tickCache
+      const realStartMasterBarStart = tickCache.getMasterBarStart(beat.voice.bar.masterBar)
+      const startBeatPlaybackStart =
+        tickCache.getRelativeBeatPlaybackRange(beat)?.startTick ?? beat.playbackStart
+      const targetTick = realStartMasterBarStart + startBeatPlaybackStart
+      api.tickPosition = targetTick
+    } else {
+      api.tickPosition = beat.absolutePlaybackStart
+    }
+    api.clearPlaybackRangeHighlight()
+    api.playbackRange = null
+    api.isLooping = false
+    setIsLooping(false)
+    setLoopRangeLabel('')
+    setShowLoopPopup(false)
+    setPendingLoopRange(null)
+  }, [])
+
+  useEffect(() => {
+    seekToBeatRef.current = seekToBeat
+  }, [seekToBeat])
+
+  const handleApplyLoop = useCallback(() => {
+    const api = apiRef.current
+    if (!api || !pendingLoopRange) return
+    api.applyPlaybackRangeFromHighlight()
+    api.isLooping = true
+    setIsLooping(true)
+    setLoopRangeLabel(pendingLoopRange.label)
+    setShowLoopPopup(false)
+  }, [pendingLoopRange])
+
+  const handleCancelLoopPopup = useCallback(() => {
+    const api = apiRef.current
+    if (api) {
+      api.clearPlaybackRangeHighlight()
+    }
+    setShowLoopPopup(false)
+    setPendingLoopRange(null)
+  }, [])
+
+  const handleClearLoop = useCallback(() => {
+    const api = apiRef.current
+    if (api) {
+      api.playbackRange = null
+      api.isLooping = false
+      api.clearPlaybackRangeHighlight()
+    }
+    setIsLooping(false)
+    setLoopRangeLabel('')
+    setShowLoopPopup(false)
+    setPendingLoopRange(null)
+  }, [])
+
   const handleSeek = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const api = apiRef.current
@@ -614,6 +761,13 @@ export const GpViewer: React.FC<GpViewerProps> = ({
       const ratio = Math.max(0, Math.min(1, clickX / rect.width))
       const targetTime = ratio * totalTimeMs
       api.timePosition = targetTime
+      api.clearPlaybackRangeHighlight()
+      api.playbackRange = null
+      api.isLooping = false
+      setIsLooping(false)
+      setLoopRangeLabel('')
+      setShowLoopPopup(false)
+      setPendingLoopRange(null)
 
       // Give a moment for cursor position to update, then update target
       setTimeout(() => {
@@ -741,7 +895,9 @@ export const GpViewer: React.FC<GpViewerProps> = ({
 
       switch (e.key) {
         case 'Escape':
-          if (isMobileToolsOpen) {
+          if (showLoopPopup) {
+            handleCancelLoopPopup()
+          } else if (isMobileToolsOpen) {
             setIsMobileToolsOpen(false)
           } else {
             handleClose()
@@ -750,6 +906,14 @@ export const GpViewer: React.FC<GpViewerProps> = ({
         case ' ':
           e.preventDefault()
           handlePlayPause()
+          break
+        case 'l':
+        case 'L':
+          if (isLooping) {
+            handleClearLoop()
+          } else if (showLoopPopup && pendingLoopRange) {
+            handleApplyLoop()
+          }
           break
         case 'f':
         case 'F':
@@ -799,7 +963,13 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     isMobileToolsOpen,
     setColorMode,
     staveProfile,
-    handleStaveProfileChange
+    handleStaveProfileChange,
+    isLooping,
+    showLoopPopup,
+    pendingLoopRange,
+    handleApplyLoop,
+    handleCancelLoopPopup,
+    handleClearLoop
   ])
 
   const cleanTitle = scoreTitle || name.replace(/\.(gp[345x]?|gp)$/i, '')
@@ -1132,6 +1302,31 @@ export const GpViewer: React.FC<GpViewerProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Active Loop Controls on Mobile */}
+            {isLooping && (
+              <div className="pdf-mobile-tools-section">
+                <div className="pdf-mobile-section-label">Active Loop</div>
+                <div className="gp-mobile-loop-row">
+                  <div className="gp-loop-badge">
+                    <Repeat size={13} className="gp-loop-badge-icon" />
+                    <span className="gp-loop-badge-text">
+                      {loopRangeLabel ? `Loop: ${loopRangeLabel}` : 'Looping'}
+                    </span>
+                  </div>
+                  <button
+                    className="pdf-mobile-segmented-btn"
+                    onClick={() => {
+                      handleClearLoop()
+                      setIsMobileToolsOpen(false)
+                    }}
+                  >
+                    <X size={14} />
+                    <span>Clear Loop</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1206,6 +1401,23 @@ export const GpViewer: React.FC<GpViewerProps> = ({
                 <span className="gp-time-divider">/</span>
                 <span className="gp-time-total">{formatPlaybackTime(totalTimeMs)}</span>
               </div>
+
+              {isLooping && (
+                <div className="gp-loop-badge" title="Loop active. Click ✕ to clear loop.">
+                  <Repeat size={13} className="gp-loop-badge-icon" />
+                  <span className="gp-loop-badge-text">
+                    {loopRangeLabel ? `Loop: ${loopRangeLabel}` : 'Looping'}
+                  </span>
+                  <button
+                    className="gp-loop-badge-clear"
+                    onClick={handleClearLoop}
+                    title="Clear Loop (L)"
+                    aria-label="Clear Loop"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Center: Tempo / Playback Speed Slider & Presets */}
@@ -1268,6 +1480,52 @@ export const GpViewer: React.FC<GpViewerProps> = ({
             </div>
           </div>
         </footer>
+      )}
+
+      {/* Floating Loop Selection Popup */}
+      {showLoopPopup && pendingLoopRange && (
+        <>
+          <div className="gp-loop-popup-backdrop" onClick={handleCancelLoopPopup} />
+          <div
+            className="gp-loop-popup"
+            style={{
+              left: `${loopPopupPosition.x}px`,
+              top: `${loopPopupPosition.y}px`
+            }}
+          >
+            <div className="gp-loop-popup-header">
+              <div className="gp-loop-popup-title-wrap">
+                <Repeat size={14} className="gp-loop-popup-icon" />
+                <span>Loop {pendingLoopRange.label}?</span>
+              </div>
+              <button
+                className="gp-loop-popup-close"
+                onClick={handleCancelLoopPopup}
+                title="Cancel"
+                aria-label="Cancel"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="gp-loop-popup-actions">
+              <button
+                className="gp-loop-popup-btn-primary"
+                onClick={handleApplyLoop}
+                title="Loop this section"
+              >
+                <Repeat size={13} />
+                <span>Loop Section</span>
+              </button>
+              <button
+                className="gp-loop-popup-btn-secondary"
+                onClick={handleCancelLoopPopup}
+                title="Cancel selection"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   )
