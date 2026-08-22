@@ -40,7 +40,12 @@ const api = {
     ipcRenderer.invoke('pdf:analyze', { filePath }),
   getSettings: (): Promise<ISettings> => ipcRenderer.invoke('mega:getSettings'),
   saveSettings: (settings: ISettings): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('mega:saveSettings', { settings })
+    ipcRenderer.invoke('mega:saveSettings', { settings }),
+  savePdfFromHtml: (
+    html: string,
+    defaultName: string
+  ): Promise<{ success: boolean; canceled?: boolean; error?: string; filePath?: string }> =>
+    ipcRenderer.invoke('pdf:savePdfFromHtml', { html, defaultName })
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

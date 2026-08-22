@@ -1818,7 +1818,6 @@ body {
   .gp-alphatab-container {
     padding: 8px 0 160px 0;
   }
-
 }
 
 /* ==========================================================================
@@ -2040,4 +2039,268 @@ body {
   gap: 10px;
 }
 
+/* PDF Export Modal */
+.gp-export-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fade-in 0.2s ease;
+}
 
+.gp-export-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2101;
+  background: rgba(22, 22, 34, 0.96);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid rgba(187, 134, 252, 0.35);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 32px rgba(187, 134, 252, 0.2);
+  width: 90%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modal-enter 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -46%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.gp-export-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.gp-export-modal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gp-export-modal-icon {
+  color: #bb86fc;
+}
+
+.gp-export-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f3f3f7;
+  letter-spacing: -0.01em;
+}
+
+.gp-export-modal-close {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.gp-export-modal-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.gp-export-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.gp-export-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.gp-export-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gp-export-option-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+  color: #d1d1de;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.gp-export-option-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(187, 134, 252, 0.3);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.gp-export-option-btn.active {
+  background: rgba(187, 134, 252, 0.15);
+  border-color: #bb86fc;
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(187, 134, 252, 0.2);
+}
+
+.gp-export-option-icon {
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.gp-export-option-btn.active .gp-export-option-icon {
+  color: #bb86fc;
+}
+
+.gp-export-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.gp-export-option-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.gp-export-option-desc {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.gp-export-option-btn.active .gp-export-option-desc {
+  color: rgba(229, 206, 255, 0.75);
+}
+
+.gp-export-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 4px 0 0 0;
+}
+
+.gp-export-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gp-export-btn-secondary {
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #d1d1de;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gp-export-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.gp-export-btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9px;
+  border: none;
+  background: linear-gradient(135deg, #bb86fc, #9a4bf7);
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(187, 134, 252, 0.4);
+  transition: all 0.15s ease;
+}
+
+.gp-export-btn-primary:hover {
+  background: linear-gradient(135deg, #c79bfd, #a85cf9);
+  box-shadow: 0 4px 18px rgba(187, 134, 252, 0.55);
+  transform: translateY(-1px);
+}
+
+.gp-export-btn-primary:active {
+  transform: translateY(0);
+}
+
+.gp-export-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.gp-export-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Mobile Export Action Button */
+.gp-mobile-export-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(187, 134, 252, 0.12);
+  border: 1px solid rgba(187, 134, 252, 0.3);
+  border-radius: 10px;
+  color: #e5ceff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gp-mobile-export-btn:hover {
+  background: rgba(187, 134, 252, 0.2);
+  border-color: #bb86fc;
+  color: #ffffff;
+}

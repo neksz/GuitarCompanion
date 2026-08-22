@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import * as alphaTab from '@coderline/alphatab'
+import { jsPDF } from 'jspdf'
 import {
   Play,
   Pause,
@@ -21,9 +22,12 @@ import {
   Music,
   Hash,
   Repeat,
-  Timer
+  Timer,
+  Download,
+  Loader2
 } from 'lucide-react'
 import { useWakeLock } from '../utils/useWakeLock'
+import { api as globalApi } from '../services/api'
 
 interface GpViewerProps {
   data: ArrayBuffer | Uint8Array | string
@@ -66,6 +70,71 @@ function getAlphaTabStaveProfile(mode: StaveProfileMode): alphaTab.StaveProfile 
     default:
       return alphaTab.StaveProfile.Tab
   }
+}
+
+function getRecognizedTuningName(notesStr: string, staffTuningName?: string): string {
+  const normalized = notesStr.toUpperCase().replace(/\s+/g, ' ').trim()
+
+  const knownTunings: Record<string, string> = {
+    // 6-string guitar
+    'E A D G B E': 'Standard',
+    'D A D G B E': 'Drop D',
+    'D A D G A D': 'DADGAD',
+    'EB AB DB GB BB EB': 'Half-Step Down',
+    'D# G# C# F# A# D#': 'Half-Step Down',
+    'D G C F A D': 'D Standard',
+    'C G C F A D': 'Drop C',
+    'C# F# B E G# C#': 'C# Standard',
+    'DB GB B E AB DB': 'Db Standard',
+    'B F# B E G# C#': 'Drop B',
+    'B GB B E AB DB': 'Drop B',
+    'A# D# G# C# F A#': 'Bb Standard',
+    'BB EB AB DB F BB': 'Bb Standard',
+    'A# F A# D# G C': 'Drop A#',
+    'BB F BB EB G C': 'Drop Bb',
+    'A E A D F# B': 'Drop A',
+    'A E A D GB B': 'Drop A',
+    'D A D F# A D': 'Open D',
+    'D A D GB A D': 'Open D',
+    'E B E G# B E': 'Open E',
+    'E B E AB B E': 'Open E',
+    'D G D G B D': 'Open G',
+    'E A E A C# E': 'Open A',
+    'E A E A DB E': 'Open A',
+    'C G C G C E': 'Open C',
+    'D A D F A D': 'D Minor Tuning',
+
+    // 7-string guitar
+    'B E A D G B E': '7-String Standard',
+    'A E A D G B E': 'Drop A',
+
+    // 8-string guitar
+    'F# B E A D G B E': '8-String Standard',
+    'GB B E A D G B E': '8-String Standard',
+    'E B E A D G B E': 'Drop E',
+
+    // 4-string bass
+    'E A D G': 'Bass Standard',
+    'D A D G': 'Bass Drop D',
+
+    // 5-string bass
+    'B E A D G': '5-String Bass Standard'
+  }
+
+  const name = knownTunings[normalized]
+  if (name) {
+    return `${name} (${notesStr})`
+  }
+
+  if (
+    staffTuningName &&
+    !staffTuningName.toLowerCase().includes('standard') &&
+    staffTuningName.toLowerCase() !== 'custom'
+  ) {
+    return `${staffTuningName} (${notesStr})`
+  }
+
+  return notesStr
 }
 
 interface TrackOption {
@@ -129,6 +198,11 @@ export const GpViewer: React.FC<GpViewerProps> = ({
   })
   const seekToBeatRef = useRef<(beat: alphaTab.model.Beat) => void>(() => {})
 
+  // Mobile long-press selection refs
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isLongPressActiveRef = useRef<boolean>(false)
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null)
+
   // Track global mouse position for positioning the loop popup
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent): void => {
@@ -154,32 +228,49 @@ export const GpViewer: React.FC<GpViewerProps> = ({
       setCurrentCapo(0)
       return
     }
-    const staff = track.staves[0]
-    setCurrentCapo(staff.capo || 0)
 
+    // Check all staves on the track for capo setting
+    let detectedCapo = 0
+    for (const s of track.staves) {
+      if (typeof s.capo === 'number' && s.capo > 0) {
+        detectedCapo = s.capo
+        break
+      }
+    }
+
+    // Fallback: check track/score annotations for text like "Capo 3" or "Capo on fret 2"
+    if (detectedCapo === 0 && track.score) {
+      const combinedText = `${track.name || ''} ${track.score.subTitle || ''} ${track.score.notices || ''}`
+      const match = combinedText.match(/capo\s*(?:fret|on|at|:)?\s*([0-9]+)/i)
+      if (match) {
+        const val = parseInt(match[1], 10)
+        if (!isNaN(val) && val > 0 && val <= 24) {
+          detectedCapo = val
+        }
+      }
+    }
+
+    setCurrentCapo(detectedCapo)
+
+    const staff = track.staves[0]
     if (staff.isPercussion) {
       setCurrentTuning('Drums')
     } else if (staff.tuning && staff.tuning.length > 0) {
       try {
-        const noteNames = staff.tuning.map((midiNote) =>
+        // alphaTab stores tuning from highest string (1) to lowest string (N).
+        // Reverse so tuning is displayed in standard musical order: lowest string to highest string (e.g. E A D G B E)
+        const lowToHighTuning = [...staff.tuning].reverse()
+        const noteNames = lowToHighTuning.map((midiNote) =>
           alphaTab.model.Tuning.getTextForTuning(midiNote, false)
         )
         const notesStr = noteNames.join(' ')
         const tuningName = staff.tuningName || staff.stringTuning?.name
-        if (
-          tuningName &&
-          tuningName.toLowerCase() !== 'standard' &&
-          tuningName.toLowerCase() !== 'custom'
-        ) {
-          setCurrentTuning(`${tuningName} (${notesStr})`)
-        } else {
-          setCurrentTuning(notesStr)
-        }
+        setCurrentTuning(getRecognizedTuningName(notesStr, tuningName))
       } catch {
-        setCurrentTuning(staff.tuningName || 'Standard')
+        setCurrentTuning(staff.tuningName || 'Standard (E A D G B E)')
       }
     } else {
-      setCurrentTuning(staff.tuningName || 'Standard')
+      setCurrentTuning(staff.tuningName || 'Standard (E A D G B E)')
     }
   }, [])
 
@@ -250,10 +341,345 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     const api = apiRef.current
     if (api) {
       api.settings.display.staveProfile = getAlphaTabStaveProfile(mode)
+      if (api.score) {
+        api.score.tracks.forEach((t) => {
+          t.staves?.forEach((s) => {
+            if (mode === 'scoretab') {
+              s.showStandardNotation = true
+              s.showTablature = true
+            } else if (mode === 'score') {
+              s.showStandardNotation = true
+              s.showTablature = false
+            } else {
+              s.showStandardNotation = false
+              s.showTablature = true
+            }
+          })
+        })
+      }
       api.updateSettings()
       api.render()
     }
   }, [])
+
+  // PDF Export Modal State & Handlers
+  const [showExportModal, setShowExportModal] = useState<boolean>(false)
+  const [exportStaveProfile, setExportStaveProfile] = useState<StaveProfileMode>('tab')
+  const [isExporting, setIsExporting] = useState<boolean>(false)
+
+  const handleOpenExportModal = useCallback(() => {
+    setExportStaveProfile(staveProfileRef.current)
+    setShowExportModal(true)
+    setIsMobileToolsOpen(false)
+  }, [])
+
+  const handleExportPdf = useCallback(async () => {
+    const currentAlphaTab = apiRef.current
+    if (!currentAlphaTab || !currentAlphaTab.score) return
+
+    setIsExporting(true)
+    let container: HTMLDivElement | null = null
+    let offscreenApi: alphaTab.AlphaTabApi | null = null
+    try {
+      const activeTitle = scoreTitle || name.replace(/\.(gp[345x]?|gp)$/i, '')
+      const activeTracks =
+        currentAlphaTab.tracks.length > 0
+          ? currentAlphaTab.tracks
+          : [currentAlphaTab.score.tracks[0]]
+
+      // Create an offscreen container for clean A4 engraving
+      container = document.createElement('div')
+      container.style.width = '210mm'
+      container.style.position = 'fixed'
+      container.style.left = '-99999px'
+      container.style.top = '-99999px'
+      container.style.opacity = '0'
+      container.style.pointerEvents = 'none'
+
+      // CRITICAL FIX: Force black text color so the canvas engine doesn't inherit dark mode colors
+      container.style.color = '#000000'
+
+      document.body.appendChild(container)
+
+      const settings = new alphaTab.Settings()
+      settings.core.engine = 'svg'
+      settings.core.fontDirectory = './font/'
+      settings.core.useWorkers = false
+      settings.core.enableLazyLoading = false
+      settings.display.layoutMode = alphaTab.LayoutMode.Page
+      settings.display.scale = 0.8
+      settings.display.stretchForce = 0.8
+      settings.display.staveProfile = getAlphaTabStaveProfile(exportStaveProfile)
+      settings.notation.elements.set(alphaTab.NotationElement.ScoreTitle, true)
+      settings.notation.elements.set(alphaTab.NotationElement.ScoreSubTitle, true)
+      settings.notation.elements.set(alphaTab.NotationElement.ScoreArtist, true)
+      settings.notation.elements.set(alphaTab.NotationElement.ScoreAlbum, true)
+      settings.notation.elements.set(alphaTab.NotationElement.ScoreMusic, true)
+      settings.notation.elements.set(alphaTab.NotationElement.ScoreWords, true)
+      settings.notation.elements.set(alphaTab.NotationElement.GuitarTuning, true)
+      settings.notation.elements.set(alphaTab.NotationElement.EffectCapo, true)
+      settings.player.enablePlayer = false
+      settings.player.enableCursor = false
+      settings.player.enableElementHighlighting = false
+      settings.player.enableUserInteraction = false
+      settings.player.soundFont = null
+
+      // CRITICAL FIX:
+      // If we are in Electron (globalApi.savePdfFromHtml exists), use the 'svg' engine because
+      // Chromium's native printToPDF handles SVGs perfectly and produces searchable vector PDFs.
+      // If we are on the Web, use the 'html5' engine! This bypasses all of Chrome's aggressive
+      // Image-sandbox font blocking issues by drawing the symbols natively in the DOM to <canvas>.
+      const isElectron = typeof globalApi !== 'undefined' && !!globalApi.savePdfFromHtml
+      settings.core.engine = isElectron ? 'svg' : 'html5'
+
+      // Configure staff flags for the chosen export notation style
+      activeTracks.forEach((t) => {
+        t.staves?.forEach((s) => {
+          if (exportStaveProfile === 'scoretab') {
+            s.showStandardNotation = true
+            s.showTablature = true
+          } else if (exportStaveProfile === 'score') {
+            s.showStandardNotation = true
+            s.showTablature = false
+          } else {
+            s.showStandardNotation = false
+            s.showTablature = true
+          }
+        })
+      })
+
+      const apiInstance = new alphaTab.AlphaTabApi(container, settings)
+      offscreenApi = apiInstance
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          resolve()
+        }, 8000)
+
+        apiInstance.renderer.postRenderFinished.on(() => {
+          clearTimeout(timeout)
+          setTimeout(resolve, 150) // Give the canvas an extra moment to ensure fonts are fully painted
+        })
+
+        apiInstance.error.on((err) => {
+          clearTimeout(timeout)
+          reject(err)
+        })
+
+        apiInstance.renderTracks(activeTracks)
+      })
+
+      // Capture alphaTab's dynamically injected style rules BEFORE destroying the offscreen API
+      const alphaTabStyleEls = Array.from(
+        document.querySelectorAll('head style[id^="alphaTabStyle"]')
+      )
+      const alphaTabStyles = alphaTabStyleEls.map((s) => s.innerHTML).join('\n')
+
+      const renderedScoreHtml = container.innerHTML
+
+      // Restore active viewport staff flags
+      activeTracks.forEach((t) => {
+        t.staves?.forEach((s) => {
+          if (staveProfileRef.current === 'scoretab') {
+            s.showStandardNotation = true
+            s.showTablature = true
+          } else if (staveProfileRef.current === 'score') {
+            s.showStandardNotation = true
+            s.showTablature = false
+          } else {
+            s.showStandardNotation = false
+            s.showTablature = true
+          }
+        })
+      })
+
+      if (isElectron) {
+        // Generate tuning and capo metadata badge for the top of page 1
+        const metaItems: string[] = []
+        metaItems.push(
+          `<span><strong>Tuning:</strong> ${currentTuning || 'Standard (E A D G B E)'}</span>`
+        )
+        metaItems.push(
+          `<span><strong>Capo:</strong> ${currentCapo > 0 ? `Fret ${currentCapo}` : 'None'}</span>`
+        )
+        const metaBadgeHtml = `<div class="pdf-meta-badge">${metaItems.join('')}</div>`
+
+        const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${activeTitle}${scoreArtist ? ` - ${scoreArtist}` : ''}</title>
+  <style>
+    ${alphaTabStyles}
+    @font-face {
+      font-display: block;
+      font-family: 'alphaTab';
+      src: url('./font/Bravura.woff2') format('woff2');
+    }
+    @page {
+      size: A4 portrait;
+      margin: 8mm 0 8mm 0;
+    }
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      height: auto !important;
+      min-height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .pdf-meta-badge {
+      position: relative;
+      margin: 0 0 3px 6mm;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-size: 8.5pt;
+      color: #555555;
+      line-height: 1.3;
+      z-index: 10;
+    }
+    .pdf-meta-badge span {
+      display: inline-block;
+      margin-right: 14px;
+    }
+    .pdf-meta-badge strong {
+      color: #333333;
+      font-weight: 600;
+    }
+    .at-surface {
+      width: 210mm !important;
+      height: auto !important;
+      min-height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+      margin: 0 auto !important;
+      padding: 0 !important;
+    }
+    .at-surface > div {
+      position: relative !important;
+      left: auto !important;
+      top: auto !important;
+      display: block !important;
+      width: 100% !important;
+      height: auto !important;
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+      margin-bottom: 6px !important;
+    }
+    svg {
+      display: block !important;
+      width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+    }
+  </style>
+</head>
+<body>
+  <div style="width: 210mm; margin: 0 auto; padding: 0;">
+    ${metaBadgeHtml}
+    ${renderedScoreHtml}
+  </div>
+</body>
+</html>`
+
+        if (globalApi && globalApi.savePdfFromHtml) {
+          const res = await globalApi.savePdfFromHtml(fullHtml, activeTitle)
+          if (res.success) {
+            setShowExportModal(false)
+          }
+        }
+      } else {
+        // Web / PWA Direct PDF Generation using native Canvas Engine + jsPDF
+        const canvases = Array.from(container.querySelectorAll('canvas'))
+
+        if (canvases.length > 0) {
+          const doc = new jsPDF({
+            unit: 'mm',
+            format: 'a4',
+            orientation: 'portrait'
+          })
+
+          // Page 1 header with tuning and capo metadata
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(8.5)
+          doc.setTextColor(60, 60, 60)
+          let metaX = 10
+          doc.text(`Tuning: ${currentTuning || 'Standard (E A D G B E)'}`, metaX, 9)
+          metaX += 65
+          doc.text(`Capo: ${currentCapo > 0 ? `Fret ${currentCapo}` : 'None'}`, metaX, 9)
+
+          let currentY = 13
+          const maxPageY = 285
+          const printWidthMm = 190
+
+          for (let i = 0; i < canvases.length; i++) {
+            const canvas = canvases[i]
+
+            // Calculate exact aspect ratio to fit the A4 page gracefully
+            const canvasAspect = canvas.height / (canvas.width || 1)
+            const printHeightMm = printWidthMm * canvasAspect
+
+            if (currentY + printHeightMm > maxPageY && i > 0) {
+              doc.addPage('a4', 'p')
+              currentY = 10
+            }
+
+            try {
+              // Create a temporary canvas to apply a solid white background
+              // because the alphaTab canvas is transparent and JPEG defaults to pitch black!
+              const whiteCanvas = document.createElement('canvas')
+              whiteCanvas.width = canvas.width
+              whiteCanvas.height = canvas.height
+              const ctx = whiteCanvas.getContext('2d')
+
+              if (ctx) {
+                ctx.fillStyle = '#ffffff'
+                ctx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height)
+                ctx.drawImage(canvas, 0, 0)
+
+                // Convert native canvas directly to a high-quality JPEG
+                const imgData = whiteCanvas.toDataURL('image/jpeg', 0.95)
+                doc.addImage(imgData, 'JPEG', 10, currentY, printWidthMm, printHeightMm)
+              }
+            } catch (renderErr) {
+              console.warn('[GpViewer] Native canvas conversion failed on stave:', renderErr)
+            }
+
+            currentY += printHeightMm + 2
+          }
+
+          const sanitizedName = (activeTitle || 'tab').replace(/[/\\?%*:|"<>]/g, '_').trim()
+          doc.save(`${sanitizedName}.pdf`)
+          setShowExportModal(false)
+        } else {
+          console.warn('[GpViewer] No SVGs found in rendered score')
+          setShowExportModal(false)
+        }
+      }
+    } catch (err) {
+      console.error('[GpViewer] Direct PDF export failed:', err)
+      setShowExportModal(false)
+    } finally {
+      try {
+        offscreenApi?.destroy()
+      } catch {
+        // ignore
+      }
+      try {
+        container?.remove()
+      } catch {
+        // ignore
+      }
+      setIsExporting(false)
+    }
+  }, [name, scoreTitle, scoreArtist, exportStaveProfile, currentTuning, currentCapo])
 
   // Color Mode (Stage / Night Theme) with persistent preference
   const [colorMode, setColorModeState] = useState<ColorMode>(() => {
@@ -447,11 +873,118 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     return () => cancelAnimationFrame(animId)
   }, [isPlaying, playbackSpeed])
 
+  // Edge-scrolling during drag selection (both mouse and touch)
+  useEffect(() => {
+    let animId: number
+    const checkEdgeScroll = (): void => {
+      // If user is actively holding down on a beat (selecting/dragging)
+      if (selectionStartBeatRef.current !== null) {
+        const scrollContainer = viewerBodyRef.current
+        if (scrollContainer) {
+          const my = lastMousePosRef.current.y
+
+          // Edge zone threshold
+          const edgeThreshold = 80
+          const maxSpeed = 15
+
+          // Bottom player bar height offset
+          const playerBar = document.querySelector('.gp-player-bar') as HTMLElement | null
+          const playerBarHeight = playerBar ? playerBar.offsetHeight : 80
+
+          // Use fixed viewport coordinates for extreme stability on mobile
+          const visibleTop = 0
+          const visibleBottom = window.innerHeight - playerBarHeight
+
+          let scrolled = false
+
+          if (my < visibleTop + edgeThreshold) {
+            // Scroll up
+            const intensity = Math.max(0.1, 1 - Math.max(0, my - visibleTop) / edgeThreshold)
+            scrollContainer.scrollTop -= maxSpeed * intensity
+            scrolled = true
+          } else if (my > visibleBottom - edgeThreshold) {
+            // Scroll down
+            const intensity = Math.max(0.1, 1 - Math.max(0, visibleBottom - my) / edgeThreshold)
+            scrollContainer.scrollTop += maxSpeed * intensity
+            scrolled = true
+          }
+
+          if (scrolled) {
+            // Because the container scrolled, the element under the physical pointer has changed.
+            // We must trigger a mousemove so alphaTab re-evaluates the beat under the pointer.
+            const mx = lastMousePosRef.current.x
+            const target = document.elementFromPoint(mx, my) || containerRef.current
+            if (target) {
+              const mouseEvent = new MouseEvent('mousemove', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: mx,
+                clientY: my,
+                buttons: 1
+              })
+              target.dispatchEvent(mouseEvent)
+            }
+          }
+        }
+      }
+      animId = requestAnimationFrame(checkEdgeScroll)
+    }
+    animId = requestAnimationFrame(checkEdgeScroll)
+    return () => cancelAnimationFrame(animId)
+  }, [])
+
   // Initialize alphaTab
   useEffect(() => {
     let isMounted = true
     const element = containerRef.current
     if (!element) return
+
+    const handleGlobalMouseUp = (e: MouseEvent | TouchEvent): void => {
+      if (!isMounted) return
+
+      try {
+        const startBeat = selectionStartBeatRef.current
+        if (!startBeat) return // Handled by beatMouseUp or not dragging
+
+        const endBeat = selectionEndBeatRef.current || startBeat
+
+        if (isDraggingRef.current && startBeat !== endBeat) {
+          // Range selected globally because they released outside the beat
+          const sBar = Math.min(startBeat.voice.bar.index + 1, endBeat.voice.bar.index + 1)
+          const eBar = Math.max(startBeat.voice.bar.index + 1, endBeat.voice.bar.index + 1)
+          const label = sBar === eBar ? `Bar ${sBar}` : `Bars ${sBar}–${eBar}`
+
+          let popupX = lastMousePosRef.current.x
+          let popupY = lastMousePosRef.current.y
+          if ('changedTouches' in e && (e as TouchEvent).changedTouches?.length > 0) {
+            popupX = (e as TouchEvent).changedTouches[0].clientX
+            popupY = (e as TouchEvent).changedTouches[0].clientY
+          } else if ('clientX' in e) {
+            popupX = (e as MouseEvent).clientX
+            popupY = (e as MouseEvent).clientY
+          }
+
+          popupX = Math.max(120, Math.min(window.innerWidth - 120, popupX))
+          popupY = Math.max(100, Math.min(window.innerHeight - 100, popupY))
+
+          setLoopPopupPosition({ x: popupX, y: popupY })
+          setPendingLoopRange({ startBeat, endBeat, label })
+          setShowLoopPopup(true)
+        } else if (startBeat && !isDraggingRef.current) {
+          seekToBeatRef.current(startBeat)
+        }
+      } finally {
+        selectionStartBeatRef.current = null
+        selectionEndBeatRef.current = null
+        isDraggingRef.current = false
+        touchStartPosRef.current = null
+      }
+    }
+
+    window.addEventListener('mouseup', handleGlobalMouseUp, { capture: true })
+    window.addEventListener('touchend', handleGlobalMouseUp, { capture: true })
+    window.addEventListener('touchcancel', handleGlobalMouseUp, { capture: true })
 
     const initPlayer = async (): Promise<void> => {
       try {
@@ -518,7 +1051,21 @@ export const GpViewer: React.FC<GpViewerProps> = ({
           }))
 
           setTracks(trackOptions)
-          setSelectedTrackIndex(0)
+          // Apply initial stave flags according to active profile preference
+          score.tracks.forEach((t) => {
+            t.staves?.forEach((s) => {
+              if (staveProfileRef.current === 'scoretab') {
+                s.showStandardNotation = true
+                s.showTablature = true
+              } else if (staveProfileRef.current === 'score') {
+                s.showStandardNotation = true
+                s.showTablature = false
+              } else {
+                s.showStandardNotation = false
+                s.showTablature = true
+              }
+            })
+          })
 
           // Explicitly render the first track and update tuning & capo metadata
           if (score.tracks.length > 0) {
@@ -656,6 +1203,9 @@ export const GpViewer: React.FC<GpViewerProps> = ({
 
     return () => {
       isMounted = false
+      window.removeEventListener('mouseup', handleGlobalMouseUp, { capture: true })
+      window.removeEventListener('touchend', handleGlobalMouseUp, { capture: true })
+      window.removeEventListener('touchcancel', handleGlobalMouseUp, { capture: true })
       if (apiRef.current) {
         try {
           apiRef.current.destroy()
@@ -936,7 +1486,9 @@ export const GpViewer: React.FC<GpViewerProps> = ({
 
       switch (e.key) {
         case 'Escape':
-          if (showLoopPopup) {
+          if (showExportModal) {
+            setShowExportModal(false)
+          } else if (showLoopPopup) {
             handleCancelLoopPopup()
           } else if (isMobileToolsOpen) {
             setIsMobileToolsOpen(false)
@@ -1015,8 +1567,149 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     handleApplyLoop,
     handleCancelLoopPopup,
     handleClearLoop,
-    toggleMetronome
+    toggleMetronome,
+    showExportModal
   ])
+
+  // Mobile Long-Press for Loop Selection
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleTouchStart = (e: TouchEvent): void => {
+      if (e.touches.length !== 1) return
+
+      const touch = e.touches[0]
+      touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+      lastMousePosRef.current = { x: touch.clientX, y: touch.clientY }
+      isLongPressActiveRef.current = false
+
+      if (touchTimerRef.current) clearTimeout(touchTimerRef.current)
+
+      touchTimerRef.current = setTimeout(() => {
+        isLongPressActiveRef.current = true
+
+        // Vibrate to notify user of long press success
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(50)
+        }
+
+        // Simulate mousedown to start selection
+        const target = document.elementFromPoint(touch.clientX, touch.clientY) || container
+        const mouseEvent = new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          screenX: touch.screenX,
+          screenY: touch.screenY,
+          buttons: 1
+        })
+        target.dispatchEvent(mouseEvent)
+      }, 500) // 500ms for long press threshold
+    }
+
+    const handleTouchMove = (e: TouchEvent): void => {
+      // NOTE: In Chrome DevTools Mobile Simulator, if alphaTab scrolls the initial beat
+      // out of view and culls its SVG node, Chrome will silently drop all subsequent
+      // touchmove events because the original touch target was detached. This causes the
+      // cursor to freeze and the edge-scroll to run infinitely. This is a simulator-only
+      // bug; real iOS/Android devices continue streaming touchmove to the window.
+      if (e.touches.length > 0) {
+        lastMousePosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      }
+
+      if (!touchStartPosRef.current) return
+
+      const touch = e.touches[0]
+
+      if (!isLongPressActiveRef.current) {
+        // If user moves before timer triggers, cancel long press
+        const dx = touch.clientX - touchStartPosRef.current.x
+        const dy = touch.clientY - touchStartPosRef.current.y
+        const distance = Math.sqrt(dx * dx + dy * dy)
+
+        if (distance > 10) {
+          if (touchTimerRef.current) {
+            clearTimeout(touchTimerRef.current)
+            touchTimerRef.current = null
+          }
+        }
+      } else {
+        // Long press is active, prevent default scrolling
+        if (e.cancelable) {
+          e.preventDefault()
+        }
+
+        // Simulate mousemove for alphaTab to update range highlight
+        const target = document.elementFromPoint(touch.clientX, touch.clientY) || container
+        const mouseEvent = new MouseEvent('mousemove', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          screenX: touch.screenX,
+          screenY: touch.screenY,
+          buttons: 1
+        })
+        target.dispatchEvent(mouseEvent)
+      }
+    }
+
+    const handleTouchEnd = (e: TouchEvent): void => {
+      if (touchTimerRef.current) {
+        clearTimeout(touchTimerRef.current)
+        touchTimerRef.current = null
+      }
+
+      if (isLongPressActiveRef.current) {
+        const touch = e.changedTouches[0]
+        const target = document.elementFromPoint(touch.clientX, touch.clientY) || container
+        const mouseEvent = new MouseEvent('mouseup', {
+          bubbles: true,
+          cancelable: true,
+          view: window,
+          clientX: touch.clientX,
+          clientY: touch.clientY,
+          screenX: touch.screenX,
+          screenY: touch.screenY,
+          buttons: 0
+        })
+        target.dispatchEvent(mouseEvent)
+      }
+
+      isLongPressActiveRef.current = false
+      touchStartPosRef.current = null
+    }
+    const handleTouchCancel = (e: TouchEvent): void => {
+      handleTouchEnd(e)
+    }
+
+    // Attach touchstart to container, but move/end to window to survive target detachment
+    container.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: false, capture: true })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true, capture: true })
+    window.addEventListener('touchcancel', handleTouchCancel, { passive: true, capture: true })
+
+    // Aggressive fallback for Chrome Mobile Simulator which drops touchmove when dragging out of bounds
+    const handlePointerMove = (e: PointerEvent): void => {
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('pointermove', handlePointerMove, { capture: true })
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove, { capture: true })
+      window.removeEventListener('touchend', handleTouchEnd, { capture: true })
+      window.removeEventListener('touchcancel', handleTouchCancel, { capture: true })
+      window.removeEventListener('pointermove', handlePointerMove, { capture: true })
+      if (touchTimerRef.current) {
+        clearTimeout(touchTimerRef.current)
+      }
+    }
+  }, [])
 
   const cleanTitle = scoreTitle || name.replace(/\.(gp[345x]?|gp)$/i, '')
   const progressRatio = totalTimeMs > 0 ? (currentTimeMs / totalTimeMs) * 100 : 0
@@ -1169,6 +1862,16 @@ export const GpViewer: React.FC<GpViewerProps> = ({
                     <ZoomIn size={16} />
                   </button>
                 </div>
+
+                {/* Export PDF */}
+                <button
+                  className="pdf-tool-btn icon-only single-btn"
+                  onClick={handleOpenExportModal}
+                  title="Export Tab to PDF"
+                  aria-label="Export Tab to PDF"
+                >
+                  <Download size={16} />
+                </button>
 
                 {/* Fullscreen Toggle */}
                 <button
@@ -1394,6 +2097,15 @@ export const GpViewer: React.FC<GpViewerProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Export Section on Mobile */}
+            <div className="pdf-mobile-tools-section">
+              <div className="pdf-mobile-section-label">Export</div>
+              <button className="gp-mobile-export-btn" onClick={handleOpenExportModal}>
+                <Download size={15} />
+                <span>Export Tab as PDF</span>
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -1598,6 +2310,111 @@ export const GpViewer: React.FC<GpViewerProps> = ({
                 title="Cancel selection"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* PDF Export Modal */}
+      {showExportModal && (
+        <>
+          <div className="gp-export-modal-backdrop" onClick={() => setShowExportModal(false)} />
+          <div
+            className="gp-export-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gp-export-title"
+          >
+            <div className="gp-export-modal-header">
+              <div className="gp-export-modal-title-wrap">
+                <Download size={18} className="gp-export-modal-icon" />
+                <h3 id="gp-export-title" className="gp-export-modal-title">
+                  Export Tab to PDF
+                </h3>
+              </div>
+              <button
+                className="gp-export-modal-close"
+                onClick={() => setShowExportModal(false)}
+                title="Close"
+                aria-label="Close export dialog"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="gp-export-modal-body">
+              <label className="gp-export-label">Notation Style</label>
+              <div className="gp-export-options">
+                <button
+                  type="button"
+                  className={`gp-export-option-btn ${exportStaveProfile === 'tab' ? 'active' : ''}`}
+                  onClick={() => setExportStaveProfile('tab')}
+                >
+                  <Hash size={16} className="gp-export-option-icon" />
+                  <div className="gp-export-option-text">
+                    <span className="gp-export-option-title">Tab Only</span>
+                    <span className="gp-export-option-desc">Guitar tablature only</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`gp-export-option-btn ${exportStaveProfile === 'scoretab' ? 'active' : ''}`}
+                  onClick={() => setExportStaveProfile('scoretab')}
+                >
+                  <Music size={16} className="gp-export-option-icon" />
+                  <div className="gp-export-option-text">
+                    <span className="gp-export-option-title">Standard + Tab</span>
+                    <span className="gp-export-option-desc">Music notation & tablature</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className={`gp-export-option-btn ${exportStaveProfile === 'score' ? 'active' : ''}`}
+                  onClick={() => setExportStaveProfile('score')}
+                >
+                  <Music size={16} className="gp-export-option-icon" />
+                  <div className="gp-export-option-text">
+                    <span className="gp-export-option-title">Standard Only</span>
+                    <span className="gp-export-option-desc">Standard music notation</span>
+                  </div>
+                </button>
+              </div>
+
+              <p className="gp-export-hint">
+                Generates a clean A4 PDF score in your selected notation style and saves it directly
+                to your computer.
+              </p>
+            </div>
+
+            <div className="gp-export-modal-actions">
+              <button
+                type="button"
+                className="gp-export-btn-secondary"
+                onClick={() => setShowExportModal(false)}
+                disabled={isExporting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="gp-export-btn-primary"
+                onClick={handleExportPdf}
+                disabled={isExporting}
+              >
+                {isExporting ? (
+                  <>
+                    <Loader2 size={15} className="gp-export-spin" />
+                    <span>Exporting PDF...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download size={15} />
+                    <span>Save PDF</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

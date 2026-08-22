@@ -26,7 +26,21 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    if (details.url.startsWith('about:') || details.url === '') {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          autoHideMenuBar: true
+        }
+      }
+    }
+    if (
+      details.url.startsWith('http:') ||
+      details.url.startsWith('https:') ||
+      details.url.startsWith('mailto:')
+    ) {
+      shell.openExternal(details.url)
+    }
     return { action: 'deny' }
   })
 

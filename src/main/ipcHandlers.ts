@@ -1,4 +1,4 @@
-import { ipcMain, app, shell, dialog } from 'electron'
+import { ipcMain, app, shell, dialog, BrowserWindow } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { megaService } from './megaService'
@@ -176,4 +176,88 @@ export function setupHandlers(): void {
       return { success: false, error: msg }
     }
   })
+
+  ipcMain.handle(
+    'pdf:savePdfFromHtml',
+    async (_, { html, defaultName }: { html: string; defaultName: string }) => {
+      let win: BrowserWindow | null = null
+      let tempFile: string | null = null
+      try {
+        win = new BrowserWindow({
+          show: false,
+          width: 1000,
+          height: 1400,
+          webPreferences: {
+            sandbox: false
+          }
+        })
+
+        // Write HTML to temporary file to support arbitrarily large scores without URL length limits
+        tempFile = path.join(app.getPath('temp'), `score_export_${Date.now()}.html`)
+        fs.writeFileSync(tempFile, html, 'utf-8')
+
+        await win.loadFile(tempFile)
+
+        // Wait for all fonts (including embedded Bravura font) to be ready
+        try {
+          await win.webContents.executeJavaScript('document.fonts.ready')
+        } catch {
+          // ignore
+        }
+
+        // Allow layout and glyph positioning to settle
+        await new Promise((resolve) => setTimeout(resolve, 300))
+
+        const pdfBuffer = await win.webContents.printToPDF({
+          pageSize: 'A4',
+          printBackground: true,
+          margins: {
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0
+          }
+        })
+
+        win.destroy()
+        win = null
+
+        const sanitizedName = (defaultName || 'tab').replace(/[/\\?%*:|"<>]/g, '_').trim()
+
+        const { filePath, canceled } = await dialog.showSaveDialog({
+          title: 'Save PDF',
+          defaultPath: `${sanitizedName}.pdf`,
+          filters: [{ name: 'PDF Documents (*.pdf)', extensions: ['pdf'] }]
+        })
+
+        if (canceled || !filePath) {
+          return { success: false, canceled: true }
+        }
+
+        fs.writeFileSync(filePath, pdfBuffer)
+        return { success: true, filePath }
+      } catch (e: unknown) {
+        console.error('PDF export error:', e)
+        if (win) {
+          try {
+            win.destroy()
+          } catch {
+            // ignore
+          }
+        }
+        const msg = e instanceof Error ? e.message : String(e)
+        return { success: false, error: msg }
+      } finally {
+        if (tempFile) {
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile)
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+  )
 }

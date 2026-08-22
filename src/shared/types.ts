@@ -78,4 +78,8 @@ export interface IGlobalApi {
   }>
   getSettings: () => Promise<ISettings>
   saveSettings: (settings: ISettings) => Promise<{ success: boolean; error?: string }>
+  savePdfFromHtml?: (
+    html: string,
+    defaultName: string
+  ) => Promise<{ success: boolean; canceled?: boolean; error?: string; filePath?: string }>
 }
