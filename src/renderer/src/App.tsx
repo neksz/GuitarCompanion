@@ -12,6 +12,7 @@ const MainLayout: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [settingsVersion, setSettingsVersion] = useState(0)
 
   return (
     <div
@@ -46,26 +47,16 @@ const MainLayout: React.FC = () => {
           activeCategory={activeCategory}
           onOpenSidebar={() => setIsSidebarOpen(true)}
           onSearch={setSearchQuery}
-          refreshTrigger={isSettingsOpen ? 0 : 1} // Trick to force refresh if needed, but better to expose a refresh method?
-          // Actually, SettingsModal handles save. FileBrowser might need to know to re-fetch settings?
-          // FileBrowser fetches settings on mount. Maybe a key change or a context?
+          refreshTrigger={settingsVersion}
         />
-        {/* We need to pass a signal to FileBrowser to reload settings if they changed. 
-            Or FileBrowser can listen to an event? Or simply passing a prop `lastSettingsUpdate` timestamp 
-        */}
       </main>
 
       {isSettingsOpen && (
         <React.Suspense fallback={null}>
-          {/* Lazy load if we wanted, but valid import for now */}
           <SettingsModal
             onClose={() => setIsSettingsOpen(false)}
             onSave={() => {
-              // Trigger refresh in FileBrowser?
-              // Ideally we pass a callback or update a context.
-              // For now, let's just reload window or assume next mount fixes it?
-              // No, user expects immediate update.
-              window.location.reload() // Simple but effective for global settings change
+              setSettingsVersion((v) => v + 1)
             }}
           />
         </React.Suspense>

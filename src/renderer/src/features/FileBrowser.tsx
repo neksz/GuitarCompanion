@@ -99,40 +99,55 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     return options
   }, [tabs])
 
-  const loadTabs = async (showSpinner = true): Promise<void> => {
+  const loadTabs = async (showSpinner = true): Promise<IGuitarTab[]> => {
     try {
       if (showSpinner) setLoading(true)
       const files = await api.getFiles()
       setTabs(files)
+      return files
     } catch (e) {
       console.error(e)
+      return []
     } finally {
       if (showSpinner) setLoading(false)
     }
   }
 
   // Load defaults from settings
-  useEffect(() => {
-    const applyDefaults = async (): Promise<void> => {
-      try {
-        const settings = await api.getSettings()
-        if (settings) {
-          if (settings.defaultSortMode) setSortMode(settings.defaultSortMode)
-          if (settings.defaultTuning) setSelectedTuning(settings.defaultTuning)
-          if (settings.defaultCapo !== undefined) setCapoFilter(settings.defaultCapo.toString())
-          if (settings.defaultFileType) setFileTypeFilter(settings.defaultFileType)
-          // If we had default status filters, apply them here too
+  const applyDefaults = async (): Promise<void> => {
+    try {
+      const settings = await api.getSettings()
+      if (settings) {
+        if (settings.defaultSortMode) setSortMode(settings.defaultSortMode)
+        if (settings.defaultTuning) setSelectedTuning(settings.defaultTuning)
+        if (settings.defaultCapo !== undefined) setCapoFilter(settings.defaultCapo.toString())
+        if (settings.defaultFileType) setFileTypeFilter(settings.defaultFileType)
+        if (settings.defaultStatusFilter && Array.isArray(settings.defaultStatusFilter)) {
+          setSelectedStatuses(settings.defaultStatusFilter)
         }
-      } catch (err) {
-        console.error('[FileBrowser] Failed to load default settings', err)
       }
+    } catch (err) {
+      console.error('[FileBrowser] Failed to load default settings', err)
     }
-    applyDefaults()
-  }, [refreshTrigger]) // Reload settings when refreshTrigger changes
+  }
 
   useEffect(() => {
-    // Auto-load tabs on mount
-    loadTabs()
+    if (refreshTrigger !== undefined) {
+      applyDefaults()
+    }
+  }, [refreshTrigger])
+
+  useEffect(() => {
+    let isMounted = true
+
+    // Auto-load tabs on mount, then apply defaults from settings once tabs are loaded
+    const initialize = async (): Promise<void> => {
+      await loadTabs()
+      if (isMounted) {
+        await applyDefaults()
+      }
+    }
+    initialize()
 
     // For web version: retry loading if empty (session might still be restoring)
     const retryInterval = setInterval(async () => {
@@ -140,8 +155,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         console.log('[FileBrowser] Retrying tab load (session might still be restoring)...')
         const files = await api.getFiles()
         if (files.length > 0) {
-          setTabs(files)
-          setLoading(false)
+          if (isMounted) {
+            setTabs(files)
+            setLoading(false)
+            await applyDefaults()
+          }
           clearInterval(retryInterval)
         }
       } else {
@@ -150,9 +168,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }, 1000)
 
     // Clean up interval after 10 seconds
-    setTimeout(() => clearInterval(retryInterval), 10000)
+    const timeoutId = setTimeout(() => clearInterval(retryInterval), 10000)
 
-    return () => clearInterval(retryInterval)
+    return () => {
+      isMounted = false
+      clearInterval(retryInterval)
+      clearTimeout(timeoutId)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
