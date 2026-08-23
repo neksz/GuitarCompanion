@@ -656,7 +656,58 @@ export const GpViewer: React.FC<GpViewerProps> = ({
           }
 
           const sanitizedName = (activeTitle || 'tab').replace(/[/\\?%*:|"<>]/g, '_').trim()
-          doc.save(`${sanitizedName}.pdf`)
+          const fileName = `${sanitizedName}.pdf`
+
+          const pdfBlob = doc.output('blob')
+
+          // Determine if running as an installed PWA (standalone/fullscreen display mode)
+          const isPwa =
+            window.matchMedia('(display-mode: standalone)').matches ||
+            window.matchMedia('(display-mode: fullscreen)').matches ||
+            (window.navigator as { standalone?: boolean }).standalone === true
+
+          // Determine if running on Android
+          const isAndroid = /android/i.test(window.navigator.userAgent)
+
+          let downloaded = false
+
+          // On Android PWA, anchor-click downloads and window.open are both blocked.
+          // The Web Share API with files is the proper way to offer a file to the user.
+          if (isPwa && isAndroid && navigator.canShare) {
+            try {
+              const file = new File([pdfBlob], fileName, { type: 'application/pdf' })
+              if (navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: fileName })
+                downloaded = true
+              }
+            } catch (shareErr: unknown) {
+              // AbortError = user cancelled the share sheet, which is fine
+              if (
+                shareErr &&
+                typeof shareErr === 'object' &&
+                'name' in shareErr &&
+                (shareErr as { name: string }).name === 'AbortError'
+              ) {
+                downloaded = true
+              } else {
+                console.warn('[GpViewer] Web Share API failed, falling back to download:', shareErr)
+              }
+            }
+          }
+
+          // Standard anchor-click download — works on desktop, Electron, and non-PWA browsers
+          if (!downloaded) {
+            const blobUrl = URL.createObjectURL(pdfBlob)
+            const link = document.createElement('a')
+            link.href = blobUrl
+            link.download = fileName
+            link.style.display = 'none'
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 30_000)
+          }
+
           setShowExportModal(false)
         } else {
           console.warn('[GpViewer] No SVGs found in rendered score')
