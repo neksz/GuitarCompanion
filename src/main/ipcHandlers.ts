@@ -177,6 +177,21 @@ export function setupHandlers(): void {
     }
   })
 
+  ipcMain.handle('mega:getPlaySessions', async () => {
+    return megaService.getPlaySessions()
+  })
+
+  ipcMain.handle('mega:savePlaySessions', async (_, { sessions }) => {
+    try {
+      await megaService.savePlaySessions(sessions)
+      return { success: true }
+    } catch (e: unknown) {
+      console.error(e)
+      const msg = e instanceof Error ? e.message : String(e)
+      return { success: false, error: msg }
+    }
+  })
+
   ipcMain.handle(
     'pdf:savePdfFromHtml',
     async (_, { html, defaultName }: { html: string; defaultName: string }) => {

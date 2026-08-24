@@ -1,5 +1,11 @@
 import { Storage, MutableFile } from 'megajs'
-import { IGuitarTab, ITabAttributes, ISettings } from '../shared/types'
+import {
+  IGuitarTab,
+  ITabAttributes,
+  ISettings,
+  IPlaySession,
+  IPlaySessionLog
+} from '../shared/types'
 import { SecureStorage } from './secureStorage'
 import { app } from 'electron'
 import fs from 'fs'
@@ -127,27 +133,29 @@ class MegaService {
   getFiles(): IGuitarTab[] {
     if (!this.rootFolder || !this.rootFolder.children) return []
 
-    return this.rootFolder.children.map((f) => {
-      const attrs = (f.attributes as ITabAttributes) || {}
-      const ext = (f.name || '').split('.').pop()?.toLowerCase()
-      const type: IGuitarTab['type'] =
-        ext === 'pdf'
-          ? 'pdf'
-          : ext === 'gp5' || ext === 'gp' || ext === 'gpx' || ext === 'gp3' || ext === 'gp4'
-            ? 'gp5'
-            : ext === 'txt'
-              ? 'txt'
-              : 'other'
+    return this.rootFolder.children
+      .filter((f) => f.name !== 'settings.json' && f.name !== 'play_sessions.json')
+      .map((f) => {
+        const attrs = (f.attributes as ITabAttributes) || {}
+        const ext = (f.name || '').split('.').pop()?.toLowerCase()
+        const type: IGuitarTab['type'] =
+          ext === 'pdf'
+            ? 'pdf'
+            : ext === 'gp5' || ext === 'gp' || ext === 'gpx' || ext === 'gp3' || ext === 'gp4'
+              ? 'gp5'
+              : ext === 'txt'
+                ? 'txt'
+                : 'other'
 
-      return {
-        id: f.nodeId || '',
-        name: f.name || 'Unknown',
-        size: f.size || 0,
-        type,
-        attributes: attrs,
-        downloadUrl: ''
-      }
-    })
+        return {
+          id: f.nodeId || '',
+          name: f.name || 'Unknown',
+          size: f.size || 0,
+          type,
+          attributes: attrs,
+          downloadUrl: ''
+        }
+      })
   }
 
   async uploadFile(filePath: string, name: string, attributes: ITabAttributes): Promise<void> {
@@ -366,6 +374,74 @@ class MegaService {
       }
 
       await this.uploadFile(tempPath, 'settings.json', {})
+    } finally {
+      try {
+        fs.unlinkSync(tempPath)
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  async getPlaySessions(): Promise<IPlaySession[]> {
+    if (!this.rootFolder || !this.rootFolder.children) return []
+
+    const sessionFile = this.rootFolder.children.find((f) => f.name === 'play_sessions.json')
+    if (!sessionFile || !sessionFile.nodeId) return []
+
+    try {
+      const uniqueId = crypto.randomBytes(4).toString('hex')
+      const tempPath = path.join(os.tmpdir(), `guitar-companion-sessions-${uniqueId}.json`)
+
+      console.log('[MegaService] getPlaySessions: Downloading to', tempPath)
+      await this.downloadFile(sessionFile.nodeId, tempPath)
+
+      if (!fs.existsSync(tempPath)) {
+        console.error(
+          '[MegaService] getPlaySessions: File does not exist after download!',
+          tempPath
+        )
+        return []
+      }
+
+      const content = fs.readFileSync(tempPath, 'utf-8')
+      try {
+        fs.unlinkSync(tempPath)
+      } catch {
+        // ignore
+      }
+
+      const data: IPlaySessionLog | IPlaySession[] = JSON.parse(content)
+      if (Array.isArray(data)) {
+        return data
+      }
+      return data?.sessions || []
+    } catch (e) {
+      console.error('[MegaService] Error loading play sessions:', e)
+      return []
+    }
+  }
+
+  async savePlaySessions(sessions: IPlaySession[]): Promise<void> {
+    if (!this.rootFolder) throw new Error('No folder')
+
+    console.log('[MegaService] Saving play sessions count:', sessions.length)
+    const tempPath = path.join(os.tmpdir(), 'guitar-companion-sessions-upload.json')
+
+    const logData: IPlaySessionLog = {
+      version: 1,
+      sessions
+    }
+
+    fs.writeFileSync(tempPath, JSON.stringify(logData))
+
+    try {
+      const existing = this.rootFolder.children?.find((f) => f.name === 'play_sessions.json')
+      if (existing && existing.nodeId) {
+        await this.deleteFile(existing.nodeId)
+      }
+
+      await this.uploadFile(tempPath, 'play_sessions.json', {})
     } finally {
       try {
         fs.unlinkSync(tempPath)

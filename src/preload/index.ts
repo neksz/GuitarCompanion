@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { ILoginCredentials, ITabAttributes, ISettings } from '../shared/types'
+import { ILoginCredentials, ITabAttributes, ISettings, IPlaySession } from '../shared/types'
 
 // Custom APIs for renderer
 const api = {
@@ -45,7 +45,10 @@ const api = {
     html: string,
     defaultName: string
   ): Promise<{ success: boolean; canceled?: boolean; error?: string; filePath?: string }> =>
-    ipcRenderer.invoke('pdf:savePdfFromHtml', { html, defaultName })
+    ipcRenderer.invoke('pdf:savePdfFromHtml', { html, defaultName }),
+  getPlaySessions: (): Promise<IPlaySession[]> => ipcRenderer.invoke('mega:getPlaySessions'),
+  savePlaySessions: (sessions: IPlaySession[]): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('mega:savePlaySessions', { sessions })
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

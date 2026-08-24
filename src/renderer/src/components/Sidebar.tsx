@@ -1,5 +1,5 @@
 import React from 'react'
-import { Music, Star, BookOpen, LogOut } from 'lucide-react'
+import { Music, Star, BookOpen, BarChart3, LogOut } from 'lucide-react'
 import { Icons } from './Icons'
 import { useAuth } from '../context/AuthContext'
 import styles from './Sidebar.module.css'
@@ -25,7 +25,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'all', label: 'My Library', icon: Music },
     { id: 'favorites', label: 'Favorites', icon: Star },
-    { id: 'learning', label: 'Learning List', icon: BookOpen }
+    { id: 'learning', label: 'Learning List', icon: BookOpen },
+    { id: 'statistics', label: 'Statistics', icon: BarChart3 }
   ]
 
   return (

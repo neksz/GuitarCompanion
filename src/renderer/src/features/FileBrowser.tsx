@@ -6,6 +6,7 @@ import { PdfViewer } from './PdfViewer'
 import { GpViewer } from './GpViewer'
 import { Icons } from '../components/Icons'
 import { api } from '../services/api'
+import { playSessionService } from '../services/PlaySessionService'
 import { analyzePdfInBrowser } from '../utils/browserPdfAnalyzer'
 import { analyzeGpFile } from '../utils/guitarProAnalyzer'
 
@@ -438,6 +439,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         setGpViewerTab(tab)
         setGpViewerData(result.data)
         setGpViewerName(tab.attributes?.displayName || tab.name)
+      } else {
+        // Non-viewer file (e.g. TXT opened externally)
+        playSessionService.recordSession({
+          fid: tab.id,
+          fn: tab.attributes?.displayName || tab.name,
+          dur: 1
+        })
       }
     } catch (e) {
       console.error(e)
@@ -466,6 +474,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           lastAccessed: new Date().toISOString()
         })
 
+        playSessionService.recordSession({
+          fid: activeTab.id,
+          fn: activeTab.attributes?.displayName || activeTab.name,
+          dur: elapsedSeconds
+        })
+
         loadTabs(false)
       } catch (err) {
         console.error('[Playtime Tracker] Failed to save playtime in MEGA:', err)
@@ -492,6 +506,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           ...activeTab.attributes,
           secondsPlayed: updatedSeconds,
           lastAccessed: new Date().toISOString()
+        })
+
+        playSessionService.recordSession({
+          fid: activeTab.id,
+          fn: activeTab.attributes?.displayName || activeTab.name,
+          dur: elapsedSeconds
         })
 
         loadTabs(false)

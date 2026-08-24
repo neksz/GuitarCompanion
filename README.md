@@ -43,17 +43,21 @@ It uses your own MEGA cloud storage for synchronization and backups. All tabs an
   - **Song Title & Artist Metadata**
   - **First-page visual preview thumbnail**
 
-### ⏱️ Practice Tracker & Analytics
+### 📊 Comprehensive Statistics & Practice Analytics
+
+- **Dedicated Statistics Panel**: Access deep insights into your practice habits directly from the sidebar.
+
+### ⏱️ Practice Tracker
 
 - **Live Practice Timer**: Tracks exact seconds spent practicing each piece.
-- **Lifetime Statistics**: Logs total cumulative practice hours and times played.
+- **Cumulative Metrics**: Automatically updates total practice hours and times played on tab close.
 - **Status Badges**: Tag and organize songs by `Favorite`, `Learning`, or `Learned`.
 
 ### ☁️ Secure Cloud Sync (MEGA)
 
 - Direct integration with **MEGA Cloud Storage** using client-side encryption.
 - **2FA / MFA Support**: Secure two-factor authentication login.
-- **Cross-Device Sync**: Keep your library, progress, custom attributes, and settings in sync across all your devices.
+- **Cross-Device Sync**: Keep your library, progress, custom attributes, practice session logs, and settings in sync across all your devices.
 
 ### 🔎 Search, Filter & Sort
 
@@ -72,6 +76,7 @@ It uses your own MEGA cloud storage for synchronization and backups. All tabs an
 
 - **Framework**: [Electron](https://www.electronjs.org/) + [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
 - **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Data Visualization**: [Recharts](https://recharts.org/)
 - **Music Score & Sound Engine**: [@coderline/alphatab](https://alphatab.net/)
 - **PDF Engine**: [pdfjs-dist](https://mozilla.github.io/pdf.js/)
 - **Cloud Storage**: [megajs](https://github.com/tonistiigi/megajs) + Web MEGA Service

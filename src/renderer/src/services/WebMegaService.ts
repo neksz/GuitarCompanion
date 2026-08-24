@@ -4,7 +4,9 @@ import {
   ILoginCredentials,
   ITabAttributes,
   IGlobalApi,
-  ISettings
+  ISettings,
+  IPlaySession,
+  IPlaySessionLog
 } from '../../../shared/types'
 
 interface IMegaNode {
@@ -216,7 +218,7 @@ export class WebMegaService implements IGlobalApi {
           downloadUrl: ''
         }
       })
-      .filter((t) => t.name !== 'settings.json')
+      .filter((t) => t.name !== 'settings.json' && t.name !== 'play_sessions.json')
   }
 
   async uploadFile(
@@ -589,6 +591,63 @@ export class WebMegaService implements IGlobalApi {
     } catch (e: unknown) {
       console.error('[WebMegaService] Save settings error:', e)
       const msg = e instanceof Error ? e.message : 'Unknown error saving settings'
+      return { success: false, error: msg }
+    }
+  }
+
+  async getPlaySessions(): Promise<IPlaySession[]> {
+    if (!this.rootFolder || !this.rootFolder.children) {
+      return []
+    }
+
+    const sessionFile = this.rootFolder.children.find((f) => f.name === 'play_sessions.json')
+    if (!sessionFile) {
+      return []
+    }
+
+    try {
+      console.log('[WebMegaService] Downloading play_sessions.json')
+      const blob = await this.downloadToBlob(sessionFile, 'application/json')
+      const text = await blob.text()
+      const data: IPlaySessionLog | IPlaySession[] = JSON.parse(text)
+      if (Array.isArray(data)) {
+        return data
+      }
+      return data?.sessions || []
+    } catch (e) {
+      console.error('[WebMegaService] Error loading play sessions:', e)
+      return []
+    }
+  }
+
+  async savePlaySessions(sessions: IPlaySession[]): Promise<{ success: boolean; error?: string }> {
+    if (!this.rootFolder) return { success: false, error: 'Not logged in' }
+
+    try {
+      console.log('[WebMegaService] Saving play sessions...', sessions.length)
+      const logData: IPlaySessionLog = {
+        version: 1,
+        sessions
+      }
+      const jsonString = JSON.stringify(logData)
+      const blob = new Blob([jsonString], { type: 'application/json' })
+      const file = new File([blob], 'play_sessions.json', { type: 'application/json' })
+
+      const existing = this.rootFolder.children?.find((f) => f.name === 'play_sessions.json')
+      if (existing && existing.delete) {
+        console.log('[WebMegaService] Deleting old play_sessions file...')
+        await new Promise<void>((resolve) => {
+          existing.delete?.((err) => {
+            if (err) console.error('Error deleting old play_sessions:', err)
+            resolve()
+          })
+        })
+      }
+
+      return this.uploadFile(file, '', 'play_sessions.json', {})
+    } catch (e: unknown) {
+      console.error('[WebMegaService] Save play sessions error:', e)
+      const msg = e instanceof Error ? e.message : 'Unknown error saving play sessions'
       return { success: false, error: msg }
     }
   }

@@ -45,6 +45,19 @@ export interface ISettings {
   pdfAlwaysFullscreen?: boolean
 }
 
+export interface IPlaySession {
+  id?: string
+  ts: string // ISO 8601 string
+  fid: string // MEGA file id
+  fn: string // File name / display name
+  dur: number // Duration in seconds
+}
+
+export interface IPlaySessionLog {
+  version: number
+  sessions: IPlaySession[]
+}
+
 export interface IGlobalApi {
   checkAuth: () => Promise<boolean>
   login: (creds: ILoginCredentials) => Promise<{ success: boolean; error?: string }>
@@ -82,4 +95,6 @@ export interface IGlobalApi {
     html: string,
     defaultName: string
   ) => Promise<{ success: boolean; canceled?: boolean; error?: string; filePath?: string }>
+  getPlaySessions?: () => Promise<IPlaySession[]>
+  savePlaySessions?: (sessions: IPlaySession[]) => Promise<{ success: boolean; error?: string }>
 }

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { Login } from './components/Login'
 import { Sidebar } from './components/Sidebar'
 import { FileBrowser } from './features/FileBrowser'
+import { StatisticsPage } from './features/StatisticsPage'
 import { SettingsModal } from './features/SettingsModal'
 
 import './assets/main.css' // Assume we might want global styles or use inline
@@ -42,13 +43,17 @@ const MainLayout: React.FC = () => {
           position: 'relative'
         }}
       >
-        <FileBrowser
-          searchQuery={searchQuery}
-          activeCategory={activeCategory}
-          onOpenSidebar={() => setIsSidebarOpen(true)}
-          onSearch={setSearchQuery}
-          refreshTrigger={settingsVersion}
-        />
+        {activeCategory === 'statistics' ? (
+          <StatisticsPage onOpenSidebar={() => setIsSidebarOpen(true)} />
+        ) : (
+          <FileBrowser
+            searchQuery={searchQuery}
+            activeCategory={activeCategory}
+            onOpenSidebar={() => setIsSidebarOpen(true)}
+            onSearch={setSearchQuery}
+            refreshTrigger={settingsVersion}
+          />
+        )}
       </main>
 
       {isSettingsOpen && (
