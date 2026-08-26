@@ -9,6 +9,7 @@ import { api } from '../services/api'
 import { playSessionService } from '../services/PlaySessionService'
 import { analyzePdfInBrowser } from '../utils/browserPdfAnalyzer'
 import { analyzeGpFile } from '../utils/guitarProAnalyzer'
+import { useMetronomeStore } from '../utils/useMetronomeStore'
 
 interface FileBrowserProps {
   searchQuery?: string
@@ -85,6 +86,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [gpViewerName, setGpViewerName] = useState<string>('')
   const [gpViewerTab, setGpViewerTab] = useState<IGuitarTab | null>(null)
   const [showFloatingSearch, setShowFloatingSearch] = useState(false)
+  const isMetronomePlaying = useMetronomeStore((s) => s.isPlaying)
+  const metronomeBpm = useMetronomeStore((s) => s.bpm)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const searchBarRef = React.useRef<HTMLDivElement>(null)
 
@@ -94,6 +97,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     const searchBarRect = searchBarRef.current.getBoundingClientRect()
     setShowFloatingSearch(searchBarRect.bottom <= containerRect.top + 10)
   }, [])
+
+  const scrollToTop = (): void => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0
+      setShowFloatingSearch(false)
+    }
+  }
 
   useEffect(() => {
     handleScroll()
@@ -435,6 +445,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
       const result = await api.openFile(tab.id, tab.name)
 
+      // Stop metronome when opening a tab viewer
+      useMetronomeStore.getState().stop()
+
       // If we got PDF data back, show the in-app viewer
       if (result?.data && result?.mimeType === 'application/pdf') {
         let url = result.data
@@ -473,6 +486,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   }
 
   const handleClosePdfViewer = async (elapsedSeconds?: number): Promise<void> => {
+    useMetronomeStore.getState().stop()
     const activeTab = pdfViewerTab
     setPdfViewerUrl(null)
     setPdfViewerName('')
@@ -507,6 +521,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   }
 
   const handleCloseGpViewer = async (elapsedSeconds?: number): Promise<void> => {
+    useMetronomeStore.getState().stop()
     const activeTab = gpViewerTab
     setGpViewerData(null)
     setGpViewerName('')
@@ -892,6 +907,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             {filteredTabs.length} {filteredTabs.length === 1 ? 'tab' : 'tabs'}
           </span>
         </div>
+        <button
+          className="floating-scroll-top-btn"
+          onClick={scrollToTop}
+          title="Scroll to top"
+          aria-label="Scroll to top"
+        >
+          <Icons.ArrowUp size={16} />
+        </button>
       </div>
 
       <div
@@ -1019,6 +1042,48 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               className="browser-actions"
               style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}
             >
+              <button
+                onClick={() => useMetronomeStore.getState().toggleOpen()}
+                title={
+                  isMetronomePlaying
+                    ? `Metronome Active (${metronomeBpm} BPM) - Click to configure (M)`
+                    : 'Open Metronome (M)'
+                }
+                style={{
+                  background: isMetronomePlaying ? 'rgba(187, 134, 252, 0.2)' : '#2b2b36',
+                  border: isMetronomePlaying ? '1px solid #bb86fc' : '1px solid #333',
+                  color: isMetronomePlaying ? '#bb86fc' : '#ccc',
+                  width: 38,
+                  height: 38,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  boxShadow: isMetronomePlaying
+                    ? '0 0 10px rgba(187, 134, 252, 0.3)'
+                    : '0 2px 5px rgba(0,0,0,0.2)',
+                  position: 'relative'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isMetronomePlaying) {
+                    e.currentTarget.style.background = '#333'
+                    e.currentTarget.style.color = '#fff'
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isMetronomePlaying) {
+                    e.currentTarget.style.background = '#2b2b36'
+                    e.currentTarget.style.color = '#ccc'
+                  }
+                }}
+                aria-label="Metronome"
+              >
+                <Icons.Metronome size={18} />
+                {isMetronomePlaying && <span className="metronome-active-indicator" />}
+              </button>
+
               <button
                 onClick={() => loadTabs(true)}
                 title="Refresh List"

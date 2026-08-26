@@ -21,8 +21,17 @@ import {
   X,
   File,
   FileAudio,
-  Clock
+  Clock,
+  Volume2,
+  VolumeX,
+  Plus,
+  Minus,
+  Play,
+  Square,
+  Sparkles,
+  ArrowUp
 } from 'lucide-react'
+import { MetronomeIcon } from './MetronomeIcon'
 
 export const Icons = {
   Music,
@@ -47,5 +56,14 @@ export const Icons = {
   X,
   File,
   FileAudio,
-  Clock
+  Clock,
+  Volume2,
+  VolumeX,
+  Plus,
+  Minus,
+  Play,
+  Square,
+  Sparkles,
+  ArrowUp,
+  Metronome: MetronomeIcon
 }

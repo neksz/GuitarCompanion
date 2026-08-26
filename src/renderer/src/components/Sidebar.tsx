@@ -11,6 +11,7 @@ interface SidebarProps {
   isOpen?: boolean
   onClose?: () => void
   onSettings?: () => void
+  onMetronome?: () => void
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -18,7 +19,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setActiveTab,
   isOpen,
   onClose,
-  onSettings
+  onSettings,
+  onMetronome
 }) => {
   const { logout } = useAuth()
 
@@ -56,6 +58,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       <div className={styles.footer}>
+        <div
+          className={styles.navItem}
+          onClick={() => onMetronome && onMetronome()}
+          title="Open Metronome (M)"
+        >
+          <Icons.Metronome size={18} />
+          <span>Metronome</span>
+        </div>
         <div className={styles.navItem} onClick={() => onSettings && onSettings()}>
           <Icons.Settings size={18} />
           <span>Settings</span>

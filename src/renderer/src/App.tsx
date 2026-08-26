@@ -1,10 +1,12 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { Login } from './components/Login'
 import { Sidebar } from './components/Sidebar'
 import { FileBrowser } from './features/FileBrowser'
 import { StatisticsPage } from './features/StatisticsPage'
 import { SettingsModal } from './features/SettingsModal'
+import { MetronomeModal } from './features/MetronomeModal'
+import { useMetronomeStore } from './utils/useMetronomeStore'
 
 import './assets/main.css' // Assume we might want global styles or use inline
 
@@ -14,6 +16,30 @@ const MainLayout: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [settingsVersion, setSettingsVersion] = useState(0)
+
+  // Global key shortcut for metronome (M)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      const activeTag = document.activeElement?.tagName
+      if (
+        activeTag === 'INPUT' ||
+        activeTag === 'TEXTAREA' ||
+        document.activeElement?.getAttribute('contenteditable') === 'true'
+      ) {
+        return
+      }
+
+      if (e.key.toLowerCase() === 'm' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (!isSettingsOpen) {
+          e.preventDefault()
+          useMetronomeStore.getState().toggleOpen()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isSettingsOpen])
 
   return (
     <div
@@ -32,6 +58,10 @@ const MainLayout: React.FC = () => {
         onSettings={() => {
           setIsSidebarOpen(false) // Close sidebar on mobile/if needed
           setIsSettingsOpen(true)
+        }}
+        onMetronome={() => {
+          setIsSidebarOpen(false)
+          useMetronomeStore.getState().open()
         }}
       />
       <main
@@ -66,6 +96,8 @@ const MainLayout: React.FC = () => {
           />
         </React.Suspense>
       )}
+
+      <MetronomeModal />
 
       {isSidebarOpen && (
         <div

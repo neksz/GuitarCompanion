@@ -26,6 +26,8 @@ import {
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
 import { useWakeLock } from '../utils/useWakeLock'
+import { Icons } from '../components/Icons'
+import { useMetronomeStore } from '../utils/useMetronomeStore'
 
 interface PdfViewerProps {
   url: string
@@ -257,6 +259,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   // Mobile Tools Sheet Open State
   const [isMobileToolsOpen, setIsMobileToolsOpen] = useState<boolean>(false)
 
+  // Metronome State from global store
+  const isMetronomePlaying = useMetronomeStore((s) => s.isPlaying)
+  const metronomeBpm = useMetronomeStore((s) => s.bpm)
+
   // Touch Swipe Navigation State
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
@@ -382,10 +388,19 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     checkAutoFullscreen()
   }, [])
 
+  // Stop metronome when opening viewer or closing/unmounting viewer
+  useEffect(() => {
+    useMetronomeStore.getState().stop()
+    return () => {
+      useMetronomeStore.getState().stop()
+    }
+  }, [])
+
   const handleClose = useCallback((): void => {
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {})
     }
+    useMetronomeStore.getState().stop()
     const elapsed = Math.max(1, sessionSecondsRef.current)
     onClose(elapsed)
   }, [onClose])
@@ -571,7 +586,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
           break
         case 'm':
         case 'M':
-          setLayout((prev) => (prev === 'double' ? 'single' : 'double'))
+          useMetronomeStore.getState().toggleOpen()
           break
         case 'i':
         case 'I':
@@ -806,6 +821,21 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                   <RotateCw size={16} />
                 </button>
 
+                {/* Metronome */}
+                <button
+                  className={`pdf-tool-btn icon-only single-btn ${isMetronomePlaying ? 'metronome-active' : ''}`}
+                  onClick={() => useMetronomeStore.getState().toggleOpen()}
+                  title={
+                    isMetronomePlaying
+                      ? `Metronome Active (${metronomeBpm} BPM) - Click to configure (M)`
+                      : 'Open Metronome (M)'
+                  }
+                  aria-label="Metronome"
+                >
+                  <Icons.Metronome size={16} />
+                  {isMetronomePlaying && <span className="metronome-active-indicator" />}
+                </button>
+
                 {/* Fullscreen */}
                 <button
                   className="pdf-tool-btn icon-only single-btn"
@@ -911,6 +941,35 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                 >
                   <Flame size={16} />
                   <span>Warm Sepia</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Metronome Control on Mobile */}
+            <div className="pdf-mobile-tools-section">
+              <div className="pdf-mobile-section-label">Metronome ({metronomeBpm} BPM)</div>
+              <div className="pdf-mobile-segmented">
+                <button
+                  className={`pdf-mobile-segmented-btn ${!isMetronomePlaying ? 'active' : ''}`}
+                  onClick={() => isMetronomePlaying && useMetronomeStore.getState().stop()}
+                >
+                  <span>Off</span>
+                </button>
+                <button
+                  className={`pdf-mobile-segmented-btn ${isMetronomePlaying ? 'active' : ''}`}
+                  onClick={() => !isMetronomePlaying && useMetronomeStore.getState().start()}
+                >
+                  <span>Start</span>
+                </button>
+                <button
+                  className="pdf-mobile-segmented-btn"
+                  onClick={() => {
+                    setIsMobileToolsOpen(false)
+                    useMetronomeStore.getState().open()
+                  }}
+                >
+                  <Icons.Metronome size={15} />
+                  <span>Configure</span>
                 </button>
               </div>
             </div>

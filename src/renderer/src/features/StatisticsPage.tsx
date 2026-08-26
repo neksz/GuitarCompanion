@@ -32,6 +32,7 @@ import { IPlaySession, IGuitarTab } from '../../../shared/types'
 import { api } from '../services/api'
 import { PdfViewer } from './PdfViewer'
 import { GpViewer } from './GpViewer'
+import { useMetronomeStore } from '../utils/useMetronomeStore'
 import styles from './StatisticsPage.module.css'
 
 interface StatisticsPageProps {
@@ -176,6 +177,9 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
 
       const result = await api.openFile(tab.id, tab.name)
 
+      // Stop metronome when opening a tab viewer
+      useMetronomeStore.getState().stop()
+
       if (result?.data && result?.mimeType === 'application/pdf') {
         let url = result.data
         if (!url.startsWith('blob:')) {
@@ -216,6 +220,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
   }
 
   const handleClosePdfViewer = async (elapsedSeconds?: number): Promise<void> => {
+    useMetronomeStore.getState().stop()
     const activeTab = pdfViewerTab
     setPdfViewerUrl(null)
     setPdfViewerName('')
@@ -247,6 +252,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
   }
 
   const handleCloseGpViewer = async (elapsedSeconds?: number): Promise<void> => {
+    useMetronomeStore.getState().stop()
     const activeTab = gpViewerTab
     setGpViewerData(null)
     setGpViewerName('')

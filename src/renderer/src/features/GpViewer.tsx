@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { useWakeLock } from '../utils/useWakeLock'
 import { api as globalApi } from '../services/api'
+import { useMetronomeStore } from '../utils/useMetronomeStore'
 
 interface GpViewerProps {
   data: ArrayBuffer | Uint8Array | string
@@ -1494,6 +1495,14 @@ export const GpViewer: React.FC<GpViewerProps> = ({
     }
   }, [])
 
+  // Stop metronome when opening viewer or closing/unmounting viewer
+  useEffect(() => {
+    useMetronomeStore.getState().stop()
+    return () => {
+      useMetronomeStore.getState().stop()
+    }
+  }, [])
+
   // Toggle Fullscreen
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -1524,6 +1533,7 @@ export const GpViewer: React.FC<GpViewerProps> = ({
         // ignore
       }
     }
+    useMetronomeStore.getState().stop()
     const elapsed = Math.max(1, sessionSecondsRef.current)
     onClose(elapsed)
   }, [onClose])
