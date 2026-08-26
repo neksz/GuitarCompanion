@@ -84,6 +84,25 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [gpViewerData, setGpViewerData] = useState<ArrayBuffer | Uint8Array | string | null>(null)
   const [gpViewerName, setGpViewerName] = useState<string>('')
   const [gpViewerTab, setGpViewerTab] = useState<IGuitarTab | null>(null)
+  const [showFloatingSearch, setShowFloatingSearch] = useState(false)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const searchBarRef = React.useRef<HTMLDivElement>(null)
+
+  const handleScroll = React.useCallback(() => {
+    if (!containerRef.current || !searchBarRef.current) return
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const searchBarRect = searchBarRef.current.getBoundingClientRect()
+    setShowFloatingSearch(searchBarRect.bottom <= containerRect.top + 10)
+  }, [])
+
+  useEffect(() => {
+    handleScroll()
+  }, [handleScroll, activeCategory])
+
+  useEffect(() => {
+    window.addEventListener('resize', handleScroll)
+    return () => window.removeEventListener('resize', handleScroll)
+  }, [handleScroll])
 
   // Extract unique file types from current tabs
   const availableFileTypes = React.useMemo(() => {
@@ -804,636 +823,909 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   return (
     <div
-      className="file-browser"
-      style={{ padding: '30px', color: '#fff', flex: 1, overflowY: 'auto', position: 'relative' }}
+      style={{
+        position: 'relative',
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        overflow: 'hidden'
+      }}
     >
-      <div className="browser-header" style={{ marginBottom: 20 }}>
-        <div
-          className="header-top-row"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 16,
-            flexWrap: 'wrap',
-            gap: '10px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
-            {onOpenSidebar && (
-              <button
-                className="mobile-only"
-                onClick={onOpenSidebar}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  padding: '5px',
-                  marginLeft: -5,
-                  marginRight: -5
-                }}
-              >
-                <Icons.Menu size={24} />
-              </button>
-            )}
-            <div>
-              <h2
-                className="header-title"
-                style={{ margin: 0, fontSize: 20, fontWeight: 600, whiteSpace: 'nowrap' }}
-              >
-                {activeCategory === 'favorites'
-                  ? 'Favorites'
-                  : activeCategory === 'learning'
-                    ? 'Learning List'
-                    : 'My Library'}
-              </h2>
-              <p
-                className="desktop-only"
-                style={{ margin: '3px 0 0', color: '#888', fontSize: 13 }}
-              >
-                {filteredTabs.length} tabs found
-              </p>
-            </div>
-          </div>
-
-          <div
-            className="search-container"
+      {/* Floating Search Bar (appears when top search bar scrolls out of view) */}
+      <div className={`floating-search-container ${showFloatingSearch ? 'visible' : ''}`}>
+        <div className="floating-search-bar">
+          <Icons.Search
+            size={16}
             style={{
-              display: 'flex',
-              gap: 10,
-              alignItems: 'center',
-              flex: '1 1 auto',
-              maxWidth: '600px',
-              minWidth: '150px'
+              color: '#bb86fc',
+              flexShrink: 0
             }}
-          >
-            <div style={{ position: 'relative', width: '100%' }}>
-              <Icons.Search
-                size={16}
-                style={{
-                  position: 'absolute',
-                  left: 10,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: '#aaa'
-                }}
-              />
-              <input
-                type="text"
-                placeholder={`Search ${activeCategory === 'favorites' ? 'favorites' : activeCategory === 'learning' ? 'learning' : 'library'}...`}
-                value={searchQuery}
-                onChange={(e) => onSearch?.(e.target.value)}
-                style={{
-                  width: '100%',
-                  background: '#1e1e24',
-                  border: '1px solid #333',
-                  padding: '8px 30px 8px 32px',
-                  borderRadius: 8,
-                  color: '#fff',
-                  fontSize: 13,
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => onSearch?.('')}
-                  style={{
-                    position: 'absolute',
-                    right: 8,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#aaa',
-                    cursor: 'pointer',
-                    padding: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                  className="clear-search-btn"
-                >
-                  <Icons.X size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div
-            className="browser-actions"
-            style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}
-          >
+          />
+          <input
+            type="text"
+            className="floating-search-input"
+            placeholder={`Search ${activeCategory === 'favorites' ? 'favorites' : activeCategory === 'learning' ? 'learning' : 'library'}...`}
+            value={searchQuery}
+            onChange={(e) => onSearch?.(e.target.value)}
+          />
+          {searchQuery && (
             <button
-              onClick={() => loadTabs(true)}
-              title="Refresh List"
+              onClick={() => onSearch?.('')}
+              title="Clear search"
               style={{
-                background: '#2b2b36',
-                border: '1px solid #333',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: 'none',
+                borderRadius: '50%',
                 color: '#ccc',
-                width: 38,
-                height: 38,
-                borderRadius: 8,
                 cursor: 'pointer',
+                padding: 4,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                transition: 'all 0.15s'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#333'
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'
                 e.currentTarget.style.color = '#fff'
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = '#2b2b36'
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
                 e.currentTarget.style.color = '#ccc'
               }}
             >
-              <Icons.RefreshCw size={18} />
+              <Icons.X size={13} />
             </button>
+          )}
+          <span
+            style={{
+              fontSize: 11,
+              color: '#999',
+              background: '#1e1e24',
+              padding: '3px 8px',
+              borderRadius: 6,
+              border: '1px solid #333',
+              whiteSpace: 'nowrap',
+              flexShrink: 0
+            }}
+          >
+            {filteredTabs.length} {filteredTabs.length === 1 ? 'tab' : 'tabs'}
+          </span>
+        </div>
+      </div>
 
-            <input
-              id="upload-input"
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-            />
-            <label
-              htmlFor="upload-input"
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="file-browser"
+        style={{ padding: '30px', color: '#fff', flex: 1, overflowY: 'auto', position: 'relative' }}
+      >
+        <div className="browser-header" style={{ marginBottom: 20 }}>
+          <div
+            className="header-top-row"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 16,
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
+              {onOpenSidebar && (
+                <button
+                  className="mobile-only"
+                  onClick={onOpenSidebar}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    padding: '5px',
+                    marginLeft: -5,
+                    marginRight: -5
+                  }}
+                >
+                  <Icons.Menu size={24} />
+                </button>
+              )}
+              <div>
+                <h2
+                  className="header-title"
+                  style={{ margin: 0, fontSize: 20, fontWeight: 600, whiteSpace: 'nowrap' }}
+                >
+                  {activeCategory === 'favorites'
+                    ? 'Favorites'
+                    : activeCategory === 'learning'
+                      ? 'Learning List'
+                      : 'My Library'}
+                </h2>
+                <p
+                  className="desktop-only"
+                  style={{ margin: '3px 0 0', color: '#888', fontSize: 13 }}
+                >
+                  {filteredTabs.length} tabs found
+                </p>
+              </div>
+            </div>
+
+            <div
+              ref={searchBarRef}
+              className="search-container"
               style={{
-                background: '#bb86fc',
-                border: 'none',
-                color: '#121212',
-                padding: '10px 20px',
-                height: 38,
-                borderRadius: 8,
-                fontWeight: '600',
                 display: 'flex',
+                gap: 10,
                 alignItems: 'center',
-                gap: 8,
-                boxShadow: '0 4px 12px rgba(187, 134, 252, 0.2)',
-                cursor: 'pointer',
-                userSelect: 'none',
-                boxSizing: 'border-box'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)'
-                e.currentTarget.style.boxShadow = '0 6px 16px rgba(187, 134, 252, 0.3)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(187, 134, 252, 0.2)'
+                flex: '1 1 auto',
+                maxWidth: '600px',
+                minWidth: '150px'
               }}
             >
-              <Icons.Upload size={18} />
-              <span className="desktop-only">Upload Tab</span>
-            </label>
-          </div>
-        </div>
+              <div style={{ position: 'relative', width: '100%' }}>
+                <Icons.Search
+                  size={16}
+                  style={{
+                    position: 'absolute',
+                    left: 10,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: '#aaa'
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder={`Search ${activeCategory === 'favorites' ? 'favorites' : activeCategory === 'learning' ? 'learning' : 'library'}...`}
+                  value={searchQuery}
+                  onChange={(e) => onSearch?.(e.target.value)}
+                  style={{
+                    width: '100%',
+                    background: '#1e1e24',
+                    border: '1px solid #333',
+                    padding: '8px 30px 8px 32px',
+                    borderRadius: 8,
+                    color: '#fff',
+                    fontSize: 13,
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => onSearch?.('')}
+                    style={{
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#aaa',
+                      cursor: 'pointer',
+                      padding: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    className="clear-search-btn"
+                  >
+                    <Icons.X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
 
-        <div
-          className="filter-bar"
-          style={{ display: 'flex', gap: '12px 24px', alignItems: 'center', flexWrap: 'wrap' }}
-        >
-          {/* Status Group */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {['To Learn', 'Learning', 'Learned', 'None'].map((s) => (
+            <div
+              className="browser-actions"
+              style={{ display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}
+            >
               <button
-                key={s}
-                onClick={() =>
-                  setSelectedStatuses((prev) =>
-                    prev.includes(s) ? prev.filter((st) => st !== s) : [...prev, s]
-                  )
-                }
+                onClick={() => loadTabs(true)}
+                title="Refresh List"
                 style={{
-                  padding: '4px 10px',
-                  borderRadius: 12,
-                  border: '1px solid ' + (selectedStatuses.includes(s) ? '#bb86fc' : '#444'),
-                  background: selectedStatuses.includes(s)
-                    ? 'rgba(187, 134, 252, 0.15)'
-                    : 'transparent',
-                  color: selectedStatuses.includes(s) ? '#bb86fc' : '#888',
-                  fontSize: 12,
+                  background: '#2b2b36',
+                  border: '1px solid #333',
+                  color: '#ccc',
+                  width: 38,
+                  height: 38,
+                  borderRadius: 8,
                   cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#333'
+                  e.currentTarget.style.color = '#fff'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#2b2b36'
+                  e.currentTarget.style.color = '#ccc'
                 }}
               >
-                {s}
+                <Icons.RefreshCw size={18} />
               </button>
-            ))}
+
+              <input
+                id="upload-input"
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+              />
+              <label
+                htmlFor="upload-input"
+                style={{
+                  background: '#bb86fc',
+                  border: 'none',
+                  color: '#121212',
+                  padding: '10px 20px',
+                  height: 38,
+                  borderRadius: 8,
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 12px rgba(187, 134, 252, 0.2)',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  boxSizing: 'border-box'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(187, 134, 252, 0.3)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(187, 134, 252, 0.2)'
+                }}
+              >
+                <Icons.Upload size={18} />
+                <span className="desktop-only">Upload Tab</span>
+              </label>
+            </div>
           </div>
 
-          <div className="desktop-only" style={{ width: 1, height: 20, background: '#444' }}></div>
-
-          {/* File Type Filter - Only show if we have different types or if filtered */}
-          {availableFileTypes.length > 1 && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span
-                style={{
-                  fontSize: 11,
-                  color: '#aaa',
-                  marginRight: 4,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  fontWeight: 600
-                }}
-              >
-                Type
-              </span>
-              {availableFileTypes.map((t) => (
+          <div
+            className="filter-bar"
+            style={{ display: 'flex', gap: '12px 24px', alignItems: 'center', flexWrap: 'wrap' }}
+          >
+            {/* Status Group */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['To Learn', 'Learning', 'Learned', 'None'].map((s) => (
                 <button
-                  key={t.id}
-                  onClick={() => setFileTypeFilter(t.id as 'all' | 'pdf' | 'gp' | 'txt')}
+                  key={s}
+                  onClick={() =>
+                    setSelectedStatuses((prev) =>
+                      prev.includes(s) ? prev.filter((st) => st !== s) : [...prev, s]
+                    )
+                  }
                   style={{
                     padding: '4px 10px',
                     borderRadius: 12,
-                    border: '1px solid ' + (fileTypeFilter === t.id ? '#03dac6' : '#444'),
-                    background: fileTypeFilter === t.id ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
-                    color: fileTypeFilter === t.id ? '#03dac6' : '#888',
+                    border: '1px solid ' + (selectedStatuses.includes(s) ? '#bb86fc' : '#444'),
+                    background: selectedStatuses.includes(s)
+                      ? 'rgba(187, 134, 252, 0.15)'
+                      : 'transparent',
+                    color: selectedStatuses.includes(s) ? '#bb86fc' : '#888',
                     fontSize: 12,
                     cursor: 'pointer',
                     transition: 'all 0.2s'
                   }}
                 >
-                  {t.label}
+                  {s}
                 </button>
               ))}
             </div>
-          )}
 
-          {availableTunings.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-              <div
-                className="desktop-only"
-                style={{ width: 1, height: 20, background: '#444' }}
-              ></div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {availableTunings.map((t) => (
+            <div
+              className="desktop-only"
+              style={{ width: 1, height: 20, background: '#444' }}
+            ></div>
+
+            {/* File Type Filter - Only show if we have different types or if filtered */}
+            {availableFileTypes.length > 1 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: '#aaa',
+                    marginRight: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    fontWeight: 600
+                  }}
+                >
+                  Type
+                </span>
+                {availableFileTypes.map((t) => (
                   <button
-                    key={t}
-                    onClick={() => setSelectedTuning((prev) => (prev === t ? '' : t))}
+                    key={t.id}
+                    onClick={() => setFileTypeFilter(t.id as 'all' | 'pdf' | 'gp' | 'txt')}
                     style={{
                       padding: '4px 10px',
                       borderRadius: 12,
-                      border: '1px solid ' + (selectedTuning === t ? '#03dac6' : '#444'),
-                      background: selectedTuning === t ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
-                      color: selectedTuning === t ? '#03dac6' : '#888',
+                      border: '1px solid ' + (fileTypeFilter === t.id ? '#03dac6' : '#444'),
+                      background:
+                        fileTypeFilter === t.id ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
+                      color: fileTypeFilter === t.id ? '#03dac6' : '#888',
                       fontSize: 12,
                       cursor: 'pointer',
                       transition: 'all 0.2s'
                     }}
                   >
-                    {t}
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {availableTunings.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+                <div
+                  className="desktop-only"
+                  style={{ width: 1, height: 20, background: '#444' }}
+                ></div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {availableTunings.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setSelectedTuning((prev) => (prev === t ? '' : t))}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: 12,
+                        border: '1px solid ' + (selectedTuning === t ? '#03dac6' : '#444'),
+                        background:
+                          selectedTuning === t ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
+                        color: selectedTuning === t ? '#03dac6' : '#888',
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+              <div
+                className="desktop-only"
+                style={{ width: 1, height: 20, background: '#444' }}
+              ></div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: '#aaa',
+                    marginRight: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    fontWeight: 600
+                  }}
+                >
+                  Sort by
+                </span>
+                {[
+                  { id: 'recent', label: 'Recent' },
+                  { id: 'created', label: 'Added' },
+                  { id: 'time', label: 'Time' },
+                  { id: 'played', label: 'Plays' },
+                  { id: 'alpha', label: 'A-Z' }
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setSortMode(m.id as 'alpha' | 'created' | 'recent' | 'played' | 'time')
+                      setSortConfig({ key: '', direction: null })
+                    }}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 12,
+                      border: '1px solid ' + (sortMode === m.id ? '#bb86fc' : '#444'),
+                      background: sortMode === m.id ? 'rgba(187, 134, 252, 0.15)' : 'transparent',
+                      color: sortMode === m.id ? '#bb86fc' : '#888',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      fontWeight: sortMode === m.id ? 600 : 400
+                    }}
+                  >
+                    {m.label}
                   </button>
                 ))}
               </div>
             </div>
-          )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-            <div
-              className="desktop-only"
-              style={{ width: 1, height: 20, background: '#444' }}
-            ></div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span
-                style={{
-                  fontSize: 11,
-                  color: '#aaa',
-                  marginRight: 4,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  fontWeight: 600
-                }}
-              >
-                Sort by
-              </span>
-              {[
-                { id: 'recent', label: 'Recent' },
-                { id: 'created', label: 'Added' },
-                { id: 'time', label: 'Time' },
-                { id: 'played', label: 'Plays' },
-                { id: 'alpha', label: 'A-Z' }
-              ].map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => {
-                    setSortMode(m.id as 'alpha' | 'created' | 'recent' | 'played' | 'time')
-                    setSortConfig({ key: '', direction: null })
-                  }}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+              <div
+                className="desktop-only"
+                style={{ width: 1, height: 20, background: '#444' }}
+              ></div>
+              {/* Capo Filter Input */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, color: '#888' }}>Capo:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="12"
+                  placeholder="#"
+                  value={capoFilter}
+                  onChange={(e) => setCapoFilter(e.target.value)}
+                  className="no-spin"
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: 12,
-                    border: '1px solid ' + (sortMode === m.id ? '#bb86fc' : '#444'),
-                    background: sortMode === m.id ? 'rgba(187, 134, 252, 0.15)' : 'transparent',
-                    color: sortMode === m.id ? '#bb86fc' : '#888',
+                    width: 30,
+                    background: '#2b2b36',
+                    border: '1px solid ' + (capoFilter ? '#bb86fc' : '#444'),
+                    borderRadius: 4,
+                    color: '#fff',
+                    padding: '4px 8px',
                     fontSize: 12,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    fontWeight: sortMode === m.id ? 600 : 400
+                    textAlign: 'center'
                   }}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-            <div
-              className="desktop-only"
-              style={{ width: 1, height: 20, background: '#444' }}
-            ></div>
-            {/* Capo Filter Input */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, color: '#888' }}>Capo:</span>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                placeholder="#"
-                value={capoFilter}
-                onChange={(e) => setCapoFilter(e.target.value)}
-                className="no-spin"
-                style={{
-                  width: 30,
-                  background: '#2b2b36',
-                  border: '1px solid ' + (capoFilter ? '#bb86fc' : '#444'),
-                  borderRadius: 4,
-                  color: '#fff',
-                  padding: '4px 8px',
-                  fontSize: 12,
-                  textAlign: 'center'
-                }}
-              />
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {filteredTabs.length === 0 ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            color: '#aaa',
-            border: '2px dashed #333',
-            borderRadius: 12,
-            position: 'relative'
-          }}
-        >
-          <Icons.FileText size={48} style={{ opacity: 0.3, marginBottom: 10 }} />
-          <p>No tabs found. Upload some to get started!</p>
-        </div>
-      ) : (
-        <div
-          className="table-container"
-          style={{
-            border: '1px solid #333',
-            borderRadius: 8,
-            overflow: 'hidden',
-            background: '#1e1e24',
-            position: 'relative'
-          }}
-        >
-          <table
-            className="library-table"
+        {filteredTabs.length === 0 ? (
+          <div
             style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              textAlign: 'left',
-              tableLayout: 'fixed'
+              textAlign: 'center',
+              padding: '60px 20px',
+              color: '#aaa',
+              border: '2px dashed #333',
+              borderRadius: 12,
+              position: 'relative'
             }}
           >
-            <thead className="desktop-only">
-              <tr
-                style={{
-                  background: '#2b2b36',
-                  color: '#bbb',
-                  fontSize: 13,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.5
-                }}
-              >
-                <th
-                  onClick={() => handleSort('name')}
-                  style={{
-                    padding: '12px 16px',
-                    fontWeight: 600,
-                    width: 'auto',
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    Name {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </div>
-                </th>
-                <th
-                  className="desktop-only"
-                  onClick={() => handleSort('tuning')}
-                  style={{
-                    padding: '12px 16px',
-                    fontWeight: 600,
-                    width: 100,
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    Tuning{' '}
-                    {sortConfig.key === 'tuning' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </div>
-                </th>
-                <th
-                  className="desktop-only"
-                  onClick={() => handleSort('capo')}
-                  style={{
-                    padding: '12px 16px',
-                    fontWeight: 600,
-                    width: 80,
-                    cursor: 'pointer',
-                    userSelect: 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    Capo {sortConfig.key === 'capo' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </div>
-                </th>
-                <th
-                  className="desktop-only"
-                  onClick={() => handleSort('status')}
-                  style={{
-                    padding: '12px 16px',
-                    fontWeight: 600,
-                    width: ['played', 'created', 'recent', 'time'].includes(sortMode) ? 180 : 110,
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                    transition: 'width 0.2s ease-in-out'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    Status{' '}
-                    {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                  </div>
-                </th>
-                <th style={{ padding: '12px 16px', width: 120, textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredTabs.map((tab) => (
+            <Icons.FileText size={48} style={{ opacity: 0.3, marginBottom: 10 }} />
+            <p>No tabs found. Upload some to get started!</p>
+          </div>
+        ) : (
+          <div
+            className="table-container"
+            style={{
+              border: '1px solid #333',
+              borderRadius: 8,
+              overflow: 'hidden',
+              background: '#1e1e24',
+              position: 'relative'
+            }}
+          >
+            <table
+              className="library-table"
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                textAlign: 'left',
+                tableLayout: 'fixed'
+              }}
+            >
+              <thead className="desktop-only">
                 <tr
-                  key={tab.id}
-                  className="tab-row"
                   style={{
-                    borderBottom: '1px solid #2b2b36',
-                    cursor: 'pointer',
-                    transition: 'background 0.2s'
+                    background: '#2b2b36',
+                    color: '#bbb',
+                    fontSize: 13,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5
                   }}
-                  onClick={() => handleOpen(tab)}
-                  title="Click to open"
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#25252e')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                 >
-                  <td
-                    className="cell-main"
-                    style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}
+                  <th
+                    onClick={() => handleSort('name')}
+                    style={{
+                      padding: '12px 16px',
+                      fontWeight: 600,
+                      width: 'auto',
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
                   >
-                    <div
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Name{' '}
+                      {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </div>
+                  </th>
+                  <th
+                    className="desktop-only"
+                    onClick={() => handleSort('tuning')}
+                    style={{
+                      padding: '12px 16px',
+                      fontWeight: 600,
+                      width: 100,
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Tuning{' '}
+                      {sortConfig.key === 'tuning' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </div>
+                  </th>
+                  <th
+                    className="desktop-only"
+                    onClick={() => handleSort('capo')}
+                    style={{
+                      padding: '12px 16px',
+                      fontWeight: 600,
+                      width: 80,
+                      cursor: 'pointer',
+                      userSelect: 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Capo{' '}
+                      {sortConfig.key === 'capo' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </div>
+                  </th>
+                  <th
+                    className="desktop-only"
+                    onClick={() => handleSort('status')}
+                    style={{
+                      padding: '12px 16px',
+                      fontWeight: 600,
+                      width: ['played', 'created', 'recent', 'time'].includes(sortMode) ? 180 : 110,
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      transition: 'width 0.2s ease-in-out'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Status{' '}
+                      {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
+                    </div>
+                  </th>
+                  <th style={{ padding: '12px 16px', width: 120, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredTabs.map((tab) => (
+                  <tr
+                    key={tab.id}
+                    className="tab-row"
+                    style={{
+                      borderBottom: '1px solid #2b2b36',
+                      cursor: 'pointer',
+                      transition: 'background 0.2s'
+                    }}
+                    onClick={() => handleOpen(tab)}
+                    title="Click to open"
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#25252e')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td
+                      className="cell-main"
                       style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 8,
-                        background: 'rgba(187, 134, 252, 0.1)',
+                        padding: '14px 16px',
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#bb86fc',
-                        flexShrink: 0
+                        gap: 12
                       }}
                     >
-                      {getFileIcon(tab.name)}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                      <span
-                        className="tab-name"
+                      <div
                         style={{
-                          fontWeight: 500,
-                          fontSize: 14,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: 'block'
+                          width: 36,
+                          height: 36,
+                          borderRadius: 8,
+                          background: 'rgba(187, 134, 252, 0.1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#bb86fc',
+                          flexShrink: 0
                         }}
                       >
-                        {tab.attributes?.displayName || tab.name}
-                      </span>
-                      {tab.attributes?.displayName && (
+                        {getFileIcon(tab.name)}
+                      </div>
+                      <div
+                        style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}
+                      >
                         <span
+                          className="tab-name"
                           style={{
-                            fontSize: 11,
-                            color: '#aaa',
+                            fontWeight: 500,
+                            fontSize: 14,
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
-                            textOverflow: 'ellipsis'
+                            textOverflow: 'ellipsis',
+                            display: 'block'
                           }}
                         >
-                          {tab.name}
+                          {tab.attributes?.displayName || tab.name}
                         </span>
-                      )}
-                    </div>
+                        {tab.attributes?.displayName && (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: '#aaa',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}
+                          >
+                            {tab.name}
+                          </span>
+                        )}
+                      </div>
 
-                    <button
-                      onClick={(e) => handleToggleFavorite(e, tab)}
+                      <button
+                        onClick={(e) => handleToggleFavorite(e, tab)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: tab.attributes?.isFavorite ? '#ffb74d' : '#333',
+                          cursor: 'pointer',
+                          padding: '4px',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!tab.attributes?.isFavorite) e.currentTarget.style.color = '#888'
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!tab.attributes?.isFavorite) e.currentTarget.style.color = '#333'
+                        }}
+                      >
+                        <Icons.Star
+                          size={18}
+                          fill={tab.attributes?.isFavorite ? '#ffb74d' : 'transparent'}
+                        />
+                      </button>
+                    </td>
+
+                    <td
+                      className="desktop-only"
+                      title={tab.attributes?.tuning || 'Standard'}
                       style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: tab.attributes?.isFavorite ? '#ffb74d' : '#333',
-                        cursor: 'pointer',
-                        padding: '4px',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!tab.attributes?.isFavorite) e.currentTarget.style.color = '#888'
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!tab.attributes?.isFavorite) e.currentTarget.style.color = '#333'
+                        padding: '14px 16px',
+                        color: '#888',
+                        fontSize: 13,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: 150
                       }}
                     >
-                      <Icons.Star
-                        size={18}
-                        fill={tab.attributes?.isFavorite ? '#ffb74d' : 'transparent'}
-                      />
-                    </button>
-                  </td>
+                      {tab.attributes?.tuning || 'Standard'}
+                    </td>
 
-                  <td
-                    className="desktop-only"
-                    title={tab.attributes?.tuning || 'Standard'}
-                    style={{
-                      padding: '14px 16px',
-                      color: '#888',
-                      fontSize: 13,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 150
-                    }}
-                  >
-                    {tab.attributes?.tuning || 'Standard'}
-                  </td>
-
-                  <td
-                    className="desktop-only"
-                    style={{
-                      padding: '14px 16px',
-                      color: '#888',
-                      fontSize: 13,
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {tab.attributes?.capo && tab.attributes.capo > 0
-                      ? `Capo ${tab.attributes.capo}`
-                      : '-'}
-                  </td>
-
-                  <td
-                    className="desktop-only"
-                    style={{ padding: '10px 16px', whiteSpace: 'nowrap', verticalAlign: 'middle' }}
-                  >
-                    <div
+                    <td
+                      className="desktop-only"
                       style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 4,
-                        justifyContent: 'center'
+                        padding: '14px 16px',
+                        color: '#888',
+                        fontSize: 13,
+                        whiteSpace: 'nowrap'
                       }}
                     >
-                      {/* Tier 1: Status Tag */}
-                      {tab.attributes?.status && tab.attributes.status !== 'None' ? (
-                        <div>
+                      {tab.attributes?.capo && tab.attributes.capo > 0
+                        ? `Capo ${tab.attributes.capo}`
+                        : '-'}
+                    </td>
+
+                    <td
+                      className="desktop-only"
+                      style={{
+                        padding: '10px 16px',
+                        whiteSpace: 'nowrap',
+                        verticalAlign: 'middle'
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 4,
+                          justifyContent: 'center'
+                        }}
+                      >
+                        {/* Tier 1: Status Tag */}
+                        {tab.attributes?.status && tab.attributes.status !== 'None' ? (
+                          <div>
+                            <span
+                              className="status-badge"
+                              style={{
+                                display: 'inline-block',
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                                fontSize: 10,
+                                fontWeight: 600,
+                                background:
+                                  tab.attributes.status === 'Learned'
+                                    ? 'rgba(76, 175, 80, 0.18)'
+                                    : tab.attributes.status === 'Learning'
+                                      ? 'rgba(255, 193, 7, 0.18)'
+                                      : 'rgba(255, 255, 255, 0.08)',
+                                color:
+                                  tab.attributes.status === 'Learned'
+                                    ? '#4caf50'
+                                    : tab.attributes.status === 'Learning'
+                                      ? '#ffc107'
+                                      : '#aaa'
+                              }}
+                            >
+                              {tab.attributes.status}
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {/* Tier 2: Practice Timer / Play Stats */}
+                        {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 ? (
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              fontSize: 12,
+                              color: '#9e9eb0'
+                            }}
+                            title={`Total practice time: ${formatPlayDuration(tab.attributes.secondsPlayed)}`}
+                          >
+                            <Icons.Clock size={12} style={{ color: '#bb86fc', flexShrink: 0 }} />
+                            <span>{formatPlayDuration(tab.attributes.secondsPlayed)}</span>
+                            {sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 && (
+                              <span style={{ color: '#666', fontSize: 11 }}>
+                                ({tab.attributes.timesPlayed}x)
+                              </span>
+                            )}
+                          </div>
+                        ) : sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 ? (
+                          <div style={{ fontSize: 12, color: '#888' }}>
+                            {tab.attributes.timesPlayed} play
+                            {tab.attributes.timesPlayed !== 1 ? 's' : ''}
+                          </div>
+                        ) : sortMode === 'created' && tab.attributes?.createdAt ? (
+                          <div style={{ fontSize: 11, color: '#777' }}>
+                            Added {formatDate(tab.attributes.createdAt)}
+                          </div>
+                        ) : sortMode === 'recent' && tab.attributes?.lastAccessed ? (
+                          <div style={{ fontSize: 11, color: '#777' }}>
+                            Viewed {formatDate(tab.attributes.lastAccessed)}
+                          </div>
+                        ) : !tab.attributes?.status || tab.attributes.status === 'None' ? (
+                          <span style={{ color: '#555', fontSize: 13 }}>-</span>
+                        ) : null}
+                      </div>
+                    </td>
+
+                    <td
+                      className="cell-actions"
+                      style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          gap: 4
+                        }}
+                      >
+                        <button
+                          onClick={(e) => handleDownload(e, tab)}
+                          title="Download Tab"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#888',
+                            cursor: 'pointer',
+                            padding: 8,
+                            borderRadius: 6,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#fff'
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#888'
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                        >
+                          <Icons.Download size={18} />
+                        </button>
+                        <button
+                          onClick={(e) => handleEditClick(e, tab)}
+                          title="Edit Details"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#888',
+                            cursor: 'pointer',
+                            padding: 8,
+                            borderRadius: 6,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#fff'
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#888'
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                        >
+                          <Icons.Edit size={18} />
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteClick(e, tab)}
+                          title="Delete Tab"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#888',
+                            cursor: 'pointer',
+                            padding: 8,
+                            borderRadius: 6,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#f44336'
+                            e.currentTarget.style.background = 'rgba(244, 67, 54, 0.1)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#888'
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                        >
+                          <Icons.Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+
+                    <td className="cell-metadata mobile-only" style={{ padding: '0 16px 14px' }}>
+                      <div
+                        className="metadata-row"
+                        style={{
+                          display: 'flex',
+                          gap: 12,
+                          alignItems: 'center',
+                          fontSize: 13,
+                          color: '#aaa'
+                        }}
+                      >
+                        <span className="mobile-only-inline">
+                          {tab.attributes?.tuning || 'Standard'}
+                        </span>
+                        <span className="mobile-only-inline">
+                          {tab.attributes?.capo && tab.attributes.capo > 0
+                            ? `Capo ${tab.attributes.capo}`
+                            : 'No Capo'}
+                        </span>
+                        {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 && (
+                          <span className="mobile-only-inline" style={{ color: '#888' }}>
+                            ⏱ {formatPlayDuration(tab.attributes.secondsPlayed)}
+                          </span>
+                        )}
+                        {tab.attributes?.status && tab.attributes.status !== 'None' && (
                           <span
                             className="status-badge"
                             style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
+                              padding: '2px 6px',
                               borderRadius: 4,
                               fontSize: 10,
                               fontWeight: 600,
                               background:
                                 tab.attributes.status === 'Learned'
-                                  ? 'rgba(76, 175, 80, 0.18)'
+                                  ? 'rgba(76, 175, 80, 0.2)'
                                   : tab.attributes.status === 'Learning'
-                                    ? 'rgba(255, 193, 7, 0.18)'
-                                    : 'rgba(255, 255, 255, 0.08)',
+                                    ? 'rgba(255, 193, 7, 0.2)'
+                                    : 'rgba(255, 255, 255, 0.1)',
                               color:
                                 tab.attributes.status === 'Learned'
                                   ? '#4caf50'
@@ -1444,285 +1736,108 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           >
                             {tab.attributes.status}
                           </span>
-                        </div>
-                      ) : null}
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-                      {/* Tier 2: Practice Timer / Play Stats */}
-                      {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 ? (
-                        <div
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontSize: 12,
-                            color: '#9e9eb0'
-                          }}
-                          title={`Total practice time: ${formatPlayDuration(tab.attributes.secondsPlayed)}`}
-                        >
-                          <Icons.Clock size={12} style={{ color: '#bb86fc', flexShrink: 0 }} />
-                          <span>{formatPlayDuration(tab.attributes.secondsPlayed)}</span>
-                          {sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 && (
-                            <span style={{ color: '#666', fontSize: 11 }}>
-                              ({tab.attributes.timesPlayed}x)
-                            </span>
-                          )}
-                        </div>
-                      ) : sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 ? (
-                        <div style={{ fontSize: 12, color: '#888' }}>
-                          {tab.attributes.timesPlayed} play
-                          {tab.attributes.timesPlayed !== 1 ? 's' : ''}
-                        </div>
-                      ) : sortMode === 'created' && tab.attributes?.createdAt ? (
-                        <div style={{ fontSize: 11, color: '#777' }}>
-                          Added {formatDate(tab.attributes.createdAt)}
-                        </div>
-                      ) : sortMode === 'recent' && tab.attributes?.lastAccessed ? (
-                        <div style={{ fontSize: 11, color: '#777' }}>
-                          Viewed {formatDate(tab.attributes.lastAccessed)}
-                        </div>
-                      ) : !tab.attributes?.status || tab.attributes.status === 'None' ? (
-                        <span style={{ color: '#555', fontSize: 13 }}>-</span>
-                      ) : null}
-                    </div>
-                  </td>
+        {isDragging && (
+          <div
+            onDragLeave={handleOverlayDragLeave}
+            onDrop={handleOverlayDrop}
+            onDragOver={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(187, 134, 252, 0.15)',
+              backdropFilter: 'blur(4px)',
+              border: '4px dashed #bb86fc',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              color: '#bb86fc',
+              flexDirection: 'column',
+              gap: 20,
+              pointerEvents: 'all'
+            }}
+          >
+            <Icons.Upload size={80} />
+            <span
+              style={{ fontSize: 28, fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}
+            >
+              Drop file to upload
+            </span>
+          </div>
+        )}
 
-                  <td
-                    className="cell-actions"
-                    style={{ padding: '14px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-end',
-                        gap: 4
-                      }}
-                    >
-                      <button
-                        onClick={(e) => handleDownload(e, tab)}
-                        title="Download Tab"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#888',
-                          cursor: 'pointer',
-                          padding: 8,
-                          borderRadius: 6,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.color = '#fff'
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.color = '#888'
-                          e.currentTarget.style.background = 'transparent'
-                        }}
-                      >
-                        <Icons.Download size={18} />
-                      </button>
-                      <button
-                        onClick={(e) => handleEditClick(e, tab)}
-                        title="Edit Details"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#888',
-                          cursor: 'pointer',
-                          padding: 8,
-                          borderRadius: 6,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.color = '#fff'
-                          e.currentTarget.style.background = 'rgba(255,255,255,0.1)'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.color = '#888'
-                          e.currentTarget.style.background = 'transparent'
-                        }}
-                      >
-                        <Icons.Edit size={18} />
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteClick(e, tab)}
-                        title="Delete Tab"
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#888',
-                          cursor: 'pointer',
-                          padding: 8,
-                          borderRadius: 6,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.color = '#f44336'
-                          e.currentTarget.style.background = 'rgba(244, 67, 54, 0.1)'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.color = '#888'
-                          e.currentTarget.style.background = 'transparent'
-                        }}
-                      >
-                        <Icons.Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
+        {uploadQueue.length > 0 && uploadQueue[currentUploadIndex] && (
+          <UploadModal
+            key={`upload-${currentUploadIndex}-${uploadQueue[currentUploadIndex].file.name}`}
+            fileName={uploadQueue[currentUploadIndex].file.name}
+            onConfirm={handleConfirmUpload}
+            onCancel={handleCancelUpload}
+            batchProgress={{ current: currentUploadIndex + 1, total: uploadQueue.length }}
+            pdfPreview={pdfAnalysis?.previewBase64}
+            suggestedAttributes={
+              pdfAnalysis ? { tuning: pdfAnalysis.tuning, capo: pdfAnalysis.capo } : undefined
+            }
+            existingFileNames={tabs.map((t) => t.name)}
+            onSkip={handleSkip}
+          />
+        )}
 
-                  <td className="cell-metadata mobile-only" style={{ padding: '0 16px 14px' }}>
-                    <div
-                      className="metadata-row"
-                      style={{
-                        display: 'flex',
-                        gap: 12,
-                        alignItems: 'center',
-                        fontSize: 13,
-                        color: '#aaa'
-                      }}
-                    >
-                      <span className="mobile-only-inline">
-                        {tab.attributes?.tuning || 'Standard'}
-                      </span>
-                      <span className="mobile-only-inline">
-                        {tab.attributes?.capo && tab.attributes.capo > 0
-                          ? `Capo ${tab.attributes.capo}`
-                          : 'No Capo'}
-                      </span>
-                      {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 && (
-                        <span className="mobile-only-inline" style={{ color: '#888' }}>
-                          ⏱ {formatPlayDuration(tab.attributes.secondsPlayed)}
-                        </span>
-                      )}
-                      {tab.attributes?.status && tab.attributes.status !== 'None' && (
-                        <span
-                          className="status-badge"
-                          style={{
-                            padding: '2px 6px',
-                            borderRadius: 4,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            background:
-                              tab.attributes.status === 'Learned'
-                                ? 'rgba(76, 175, 80, 0.2)'
-                                : tab.attributes.status === 'Learning'
-                                  ? 'rgba(255, 193, 7, 0.2)'
-                                  : 'rgba(255, 255, 255, 0.1)',
-                            color:
-                              tab.attributes.status === 'Learned'
-                                ? '#4caf50'
-                                : tab.attributes.status === 'Learning'
-                                  ? '#ffc107'
-                                  : '#aaa'
-                          }}
-                        >
-                          {tab.attributes.status}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {editTab && (
+          <UploadModal
+            fileName={editTab.name}
+            initialAttributes={editTab.attributes}
+            isEditMode={true}
+            existingFileNames={tabs.map((t) => t.name)}
+            onConfirm={handleConfirmEdit}
+            onCancel={() => setEditTab(null)}
+          />
+        )}
 
-      {isDragging && (
-        <div
-          onDragLeave={handleOverlayDragLeave}
-          onDrop={handleOverlayDrop}
-          onDragOver={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-          }}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(187, 134, 252, 0.15)',
-            backdropFilter: 'blur(4px)',
-            border: '4px dashed #bb86fc',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            color: '#bb86fc',
-            flexDirection: 'column',
-            gap: 20,
-            pointerEvents: 'all'
-          }}
-        >
-          <Icons.Upload size={80} />
-          <span style={{ fontSize: 28, fontWeight: 600, textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-            Drop file to upload
-          </span>
-        </div>
-      )}
+        {deleteTab && (
+          <ConfirmationModal
+            title="Delete Tab"
+            message={`Are you sure you want to delete "${deleteTab.name}"? This action cannot be undone.`}
+            confirmLabel="Delete"
+            isDestructive={true}
+            onConfirm={handleConfirmDelete}
+            onCancel={() => setDeleteTab(null)}
+          />
+        )}
 
-      {uploadQueue.length > 0 && uploadQueue[currentUploadIndex] && (
-        <UploadModal
-          key={`upload-${currentUploadIndex}-${uploadQueue[currentUploadIndex].file.name}`}
-          fileName={uploadQueue[currentUploadIndex].file.name}
-          onConfirm={handleConfirmUpload}
-          onCancel={handleCancelUpload}
-          batchProgress={{ current: currentUploadIndex + 1, total: uploadQueue.length }}
-          pdfPreview={pdfAnalysis?.previewBase64}
-          suggestedAttributes={
-            pdfAnalysis ? { tuning: pdfAnalysis.tuning, capo: pdfAnalysis.capo } : undefined
-          }
-          existingFileNames={tabs.map((t) => t.name)}
-          onSkip={handleSkip}
-        />
-      )}
+        {pdfViewerUrl && (
+          <PdfViewer
+            url={pdfViewerUrl}
+            name={pdfViewerName}
+            initialSecondsPlayed={pdfViewerTab?.attributes?.secondsPlayed || 0}
+            onClose={handleClosePdfViewer}
+          />
+        )}
 
-      {editTab && (
-        <UploadModal
-          fileName={editTab.name}
-          initialAttributes={editTab.attributes}
-          isEditMode={true}
-          existingFileNames={tabs.map((t) => t.name)}
-          onConfirm={handleConfirmEdit}
-          onCancel={() => setEditTab(null)}
-        />
-      )}
-
-      {deleteTab && (
-        <ConfirmationModal
-          title="Delete Tab"
-          message={`Are you sure you want to delete "${deleteTab.name}"? This action cannot be undone.`}
-          confirmLabel="Delete"
-          isDestructive={true}
-          onConfirm={handleConfirmDelete}
-          onCancel={() => setDeleteTab(null)}
-        />
-      )}
-
-      {pdfViewerUrl && (
-        <PdfViewer
-          url={pdfViewerUrl}
-          name={pdfViewerName}
-          initialSecondsPlayed={pdfViewerTab?.attributes?.secondsPlayed || 0}
-          onClose={handleClosePdfViewer}
-        />
-      )}
-
-      {gpViewerData && (
-        <GpViewer
-          data={gpViewerData}
-          name={gpViewerName}
-          initialSecondsPlayed={gpViewerTab?.attributes?.secondsPlayed || 0}
-          onClose={handleCloseGpViewer}
-        />
-      )}
+        {gpViewerData && (
+          <GpViewer
+            data={gpViewerData}
+            name={gpViewerName}
+            initialSecondsPlayed={gpViewerTab?.attributes?.secondsPlayed || 0}
+            onClose={handleCloseGpViewer}
+          />
+        )}
+      </div>
     </div>
   )
 }
