@@ -18,7 +18,8 @@ import {
   RefreshCw,
   TrendingUp,
   BarChart3,
-  Menu
+  Menu,
+  Loader2
 } from 'lucide-react'
 import {
   playSessionService,
@@ -27,7 +28,10 @@ import {
   IOverallStats,
   ISongLeaderboardEntry
 } from '../services/PlaySessionService'
-import { IPlaySession } from '../../../shared/types'
+import { IPlaySession, IGuitarTab } from '../../../shared/types'
+import { api } from '../services/api'
+import { PdfViewer } from './PdfViewer'
+import { GpViewer } from './GpViewer'
 import styles from './StatisticsPage.module.css'
 
 interface StatisticsPageProps {
@@ -44,6 +48,21 @@ const formatSeconds = (sec: number): string => {
     return `${hours}h ${remainingMins > 0 ? `${remainingMins}m` : ''}`
   }
   return `${minutes}m`
+}
+
+const getFileType = (filename: string): 'pdf' | 'gp' | 'txt' | 'other' => {
+  const lower = filename.toLowerCase()
+  if (lower.endsWith('.pdf')) return 'pdf'
+  if (
+    lower.endsWith('.gp3') ||
+    lower.endsWith('.gp4') ||
+    lower.endsWith('.gp5') ||
+    lower.endsWith('.gpx') ||
+    lower.endsWith('.gp')
+  )
+    return 'gp'
+  if (lower.endsWith('.txt')) return 'txt'
+  return 'other'
 }
 
 interface CustomTooltipProps {
@@ -86,6 +105,13 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [granularity, setGranularity] = useState<Granularity>('day')
+  const [openingTabId, setOpeningTabId] = useState<string | null>(null)
+  const [pdfViewerUrl, setPdfViewerUrl] = useState<string | null>(null)
+  const [pdfViewerName, setPdfViewerName] = useState<string>('')
+  const [pdfViewerTab, setPdfViewerTab] = useState<IGuitarTab | null>(null)
+  const [gpViewerData, setGpViewerData] = useState<ArrayBuffer | Uint8Array | string | null>(null)
+  const [gpViewerName, setGpViewerName] = useState<string>('')
+  const [gpViewerTab, setGpViewerTab] = useState<IGuitarTab | null>(null)
 
   const loadData = async (forceRefresh = true): Promise<void> => {
     if (forceRefresh) setRefreshing(true)
@@ -118,6 +144,138 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
   const leaderboard: ISongLeaderboardEntry[] = useMemo(() => {
     return playSessionService.getLeaderboard(sessions, 10)
   }, [sessions])
+
+  const handleOpenTab = async (item: ISongLeaderboardEntry): Promise<void> => {
+    if (openingTabId) return
+    const targetKey = item.fid || item.name
+    setOpeningTabId(targetKey)
+
+    try {
+      const tabs = await api.getFiles()
+      const tab =
+        tabs.find((t) => t.id === item.fid) ||
+        tabs.find((t) => t.name === item.name || t.attributes?.displayName === item.name) ||
+        tabs.find(
+          (t) =>
+            t.name.toLowerCase() === item.name.toLowerCase() ||
+            (t.attributes?.displayName &&
+              t.attributes.displayName.toLowerCase() === item.name.toLowerCase())
+        )
+
+      if (!tab) {
+        alert(`Tab "${item.name}" could not be found in your library.`)
+        return
+      }
+
+      // Update last accessed timestamp and play count
+      await api.updateAttributes(tab.id, {
+        ...tab.attributes,
+        lastAccessed: new Date().toISOString(),
+        timesPlayed: (tab.attributes?.timesPlayed || 0) + 1
+      })
+
+      const result = await api.openFile(tab.id, tab.name)
+
+      if (result?.data && result?.mimeType === 'application/pdf') {
+        let url = result.data
+        if (!url.startsWith('blob:')) {
+          const binary = atob(url)
+          const bytes = new Uint8Array(binary.length)
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i)
+          }
+          const blob = new Blob([bytes], { type: 'application/pdf' })
+          url = URL.createObjectURL(blob)
+        }
+        setPdfViewerTab(tab)
+        setPdfViewerUrl(url)
+        setPdfViewerName(tab.attributes?.displayName || tab.name)
+      } else if (
+        result?.data &&
+        (result?.mimeType === 'application/x-guitar-pro' || getFileType(tab.name) === 'gp')
+      ) {
+        setGpViewerTab(tab)
+        setGpViewerData(result.data)
+        setGpViewerName(tab.attributes?.displayName || tab.name)
+      } else {
+        // Non-viewer file (e.g. TXT opened externally)
+        await playSessionService.recordSession({
+          fid: tab.id,
+          fn: tab.attributes?.displayName || tab.name,
+          dur: 1
+        })
+        const updatedSessions = await playSessionService.getSessions(false)
+        setSessions([...updatedSessions])
+      }
+    } catch (err) {
+      console.error('[StatisticsPage] Failed to open file:', err)
+      alert('Failed to open file')
+    } finally {
+      setOpeningTabId(null)
+    }
+  }
+
+  const handleClosePdfViewer = async (elapsedSeconds?: number): Promise<void> => {
+    const activeTab = pdfViewerTab
+    setPdfViewerUrl(null)
+    setPdfViewerName('')
+    setPdfViewerTab(null)
+
+    if (activeTab && elapsedSeconds && elapsedSeconds > 0) {
+      try {
+        const currentSeconds = activeTab.attributes?.secondsPlayed || 0
+        const updatedSeconds = currentSeconds + elapsedSeconds
+
+        await api.updateAttributes(activeTab.id, {
+          ...activeTab.attributes,
+          secondsPlayed: updatedSeconds,
+          lastAccessed: new Date().toISOString()
+        })
+
+        await playSessionService.recordSession({
+          fid: activeTab.id,
+          fn: activeTab.attributes?.displayName || activeTab.name,
+          dur: elapsedSeconds
+        })
+
+        const updatedSessions = await playSessionService.getSessions(false)
+        setSessions([...updatedSessions])
+      } catch (err) {
+        console.error('[StatisticsPage] Failed to save playtime in MEGA:', err)
+      }
+    }
+  }
+
+  const handleCloseGpViewer = async (elapsedSeconds?: number): Promise<void> => {
+    const activeTab = gpViewerTab
+    setGpViewerData(null)
+    setGpViewerName('')
+    setGpViewerTab(null)
+
+    if (activeTab && elapsedSeconds && elapsedSeconds > 0) {
+      try {
+        const currentSeconds = activeTab.attributes?.secondsPlayed || 0
+        const updatedSeconds = currentSeconds + elapsedSeconds
+
+        await api.updateAttributes(activeTab.id, {
+          ...activeTab.attributes,
+          secondsPlayed: updatedSeconds,
+          lastAccessed: new Date().toISOString()
+        })
+
+        await playSessionService.recordSession({
+          fid: activeTab.id,
+          fn: activeTab.attributes?.displayName || activeTab.name,
+          dur: elapsedSeconds
+        })
+
+        const updatedSessions = await playSessionService.getSessions(false)
+        setSessions([...updatedSessions])
+      } catch (err) {
+        console.error('[StatisticsPage] Failed to save playtime in MEGA:', err)
+      }
+    }
+  }
 
   const hasSessions = sessions.length > 0
 
@@ -381,8 +539,23 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
                       ? styles.rankBronze
                       : styles.rankDefault
 
+              const isOpening = openingTabId === (item.fid || item.name)
+
               return (
-                <div key={item.fid || idx} className={styles.leaderboardItem}>
+                <div
+                  key={item.fid || idx}
+                  className={styles.leaderboardItem}
+                  onClick={() => handleOpenTab(item)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleOpenTab(item)
+                    }
+                  }}
+                  title={`Click to open "${item.name}"`}
+                >
                   <div className={styles.leaderboardLeft}>
                     <div className={`${styles.rankBadge} ${rankClass}`}>#{idx + 1}</div>
                     <div className={styles.songInfo}>
@@ -413,6 +586,13 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
                       </span>
                       <span className={styles.statBadgeLabel}>Time</span>
                     </div>
+                    <div className={styles.openIndicator}>
+                      {isOpening ? (
+                        <Loader2 size={18} className={styles.spin} />
+                      ) : (
+                        <PlayCircle size={18} className={styles.openIcon} />
+                      )}
+                    </div>
                   </div>
                 </div>
               )
@@ -430,6 +610,24 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
             sessions. Your statistics and charts will automatically populate here!
           </p>
         </div>
+      )}
+
+      {pdfViewerUrl && (
+        <PdfViewer
+          url={pdfViewerUrl}
+          name={pdfViewerName}
+          initialSecondsPlayed={pdfViewerTab?.attributes?.secondsPlayed || 0}
+          onClose={handleClosePdfViewer}
+        />
+      )}
+
+      {gpViewerData && (
+        <GpViewer
+          data={gpViewerData}
+          name={gpViewerName}
+          initialSecondsPlayed={gpViewerTab?.attributes?.secondsPlayed || 0}
+          onClose={handleCloseGpViewer}
+        />
       )}
     </div>
   )

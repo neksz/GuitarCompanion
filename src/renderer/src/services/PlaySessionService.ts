@@ -84,21 +84,20 @@ class PlaySessionService {
     sessions.push(newSession)
     this.sessionsCache = sessions
 
-    // Debounce save to MEGA
+    // Clear any previous debounce timeout and save immediately
     if (this.saveTimeout) {
       clearTimeout(this.saveTimeout)
+      this.saveTimeout = null
     }
 
-    this.saveTimeout = setTimeout(async () => {
-      try {
-        if (api.savePlaySessions && this.sessionsCache) {
-          await api.savePlaySessions(this.sessionsCache)
-          console.log('[PlaySessionService] Saved play sessions to MEGA')
-        }
-      } catch (err) {
-        console.error('[PlaySessionService] Failed to save sessions:', err)
+    try {
+      if (api.savePlaySessions && this.sessionsCache) {
+        await api.savePlaySessions(this.sessionsCache)
+        console.log('[PlaySessionService] Saved play sessions to storage')
       }
-    }, 500)
+    } catch (err) {
+      console.error('[PlaySessionService] Failed to save sessions:', err)
+    }
   }
 
   getOverallStats(sessions: IPlaySession[]): IOverallStats {

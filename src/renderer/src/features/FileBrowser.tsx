@@ -441,7 +441,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         setGpViewerName(tab.attributes?.displayName || tab.name)
       } else {
         // Non-viewer file (e.g. TXT opened externally)
-        playSessionService.recordSession({
+        await playSessionService.recordSession({
           fid: tab.id,
           fn: tab.attributes?.displayName || tab.name,
           dur: 1
@@ -474,7 +474,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           lastAccessed: new Date().toISOString()
         })
 
-        playSessionService.recordSession({
+        await playSessionService.recordSession({
           fid: activeTab.id,
           fn: activeTab.attributes?.displayName || activeTab.name,
           dur: elapsedSeconds
@@ -508,7 +508,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           lastAccessed: new Date().toISOString()
         })
 
-        playSessionService.recordSession({
+        await playSessionService.recordSession({
           fid: activeTab.id,
           fn: activeTab.attributes?.displayName || activeTab.name,
           dur: elapsedSeconds
