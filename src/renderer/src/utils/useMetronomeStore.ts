@@ -38,6 +38,7 @@ export interface MetronomeStore extends MetronomeState {
   isPlaying: boolean
   currentBeat: number
   tapHistory: number[]
+  overrideBpm: number | null
 
   // Active tab context (set when a viewer is open)
   activeTabId: string | null
@@ -56,9 +57,10 @@ export interface MetronomeStore extends MetronomeState {
   toggleOpen: () => void
 
   // Playback actions
-  start: () => Promise<void>
+  start: (customBpm?: number) => Promise<void>
   stop: () => void
   togglePlay: () => Promise<void>
+  setOverrideBpm: (bpm: number | null) => void
 
   // Parameter actions
   setBpm: (bpm: number) => void
@@ -77,7 +79,7 @@ const saved = loadSavedConfig()
 
 export const useMetronomeStore = create<MetronomeStore>((set, get) => {
   const engine = createMetronomeEngine(() => ({
-    bpm: get().bpm,
+    bpm: get().overrideBpm ?? get().bpm,
     beatsPerMeasure: get().beatsPerMeasure,
     beatUnit: get().beatUnit,
     accentFirstBeat: get().accentFirstBeat,
@@ -94,6 +96,7 @@ export const useMetronomeStore = create<MetronomeStore>((set, get) => {
     isPlaying: false,
     currentBeat: -1,
     tapHistory: [],
+    overrideBpm: null,
 
     activeTabId: null,
     activeTabName: null,
@@ -145,14 +148,16 @@ export const useMetronomeStore = create<MetronomeStore>((set, get) => {
     close: (): void => set({ isOpen: false }),
     toggleOpen: (): void => set((s) => ({ isOpen: !s.isOpen })),
 
-    start: async (): Promise<void> => {
-      set({ isPlaying: true, currentBeat: 0 })
+    start: async (customBpm?: number): Promise<void> => {
+      const override =
+        customBpm !== undefined ? Math.min(300, Math.max(30, Math.round(customBpm))) : null
+      set({ isPlaying: true, currentBeat: 0, overrideBpm: override })
       await engine.start()
     },
 
     stop: (): void => {
       engine.stop()
-      set({ isPlaying: false, currentBeat: -1 })
+      set({ isPlaying: false, currentBeat: -1, overrideBpm: null })
     },
 
     togglePlay: async (): Promise<void> => {
@@ -164,9 +169,14 @@ export const useMetronomeStore = create<MetronomeStore>((set, get) => {
       }
     },
 
+    setOverrideBpm: (bpm: number | null): void => {
+      const clamped = bpm !== null ? Math.min(300, Math.max(30, Math.round(bpm))) : null
+      set({ overrideBpm: clamped })
+    },
+
     setBpm: (bpm: number): void => {
       const clamped = Math.min(300, Math.max(30, Math.round(bpm)))
-      set({ bpm: clamped })
+      set({ bpm: clamped, overrideBpm: null })
       saveConfig({
         bpm: clamped,
         beatsPerMeasure: get().beatsPerMeasure,

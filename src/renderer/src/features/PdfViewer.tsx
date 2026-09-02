@@ -263,7 +263,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   // Metronome State from global store
   const isMetronomePlaying = useMetronomeStore((s) => s.isPlaying)
-  const metronomeBpm = useMetronomeStore((s) => s.bpm)
+  const metronomeBpm = useMetronomeStore((s) => s.overrideBpm ?? s.bpm)
 
   // Touch Swipe Navigation State
   const touchStartX = useRef<number | null>(null)
@@ -395,10 +395,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     useMetronomeStore.getState().stop()
     if (tab) {
       useMetronomeStore.getState().setActiveTab(tab.id, tab.name, tab.attributes)
-      if (tab.attributes?.tempo && tab.attributes.tempo > 0) {
-        // Silently set BPM to tab's saved tempo without auto-starting or opening modal
-        useMetronomeStore.getState().setBpm(tab.attributes.tempo)
-      }
     }
     return () => {
       useMetronomeStore.getState().stop()
@@ -414,6 +410,23 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     const elapsed = Math.max(1, sessionSecondsRef.current)
     onClose(elapsed)
   }, [onClose])
+
+  const handleToggleSavedTempoMetronome = useCallback(async (): Promise<void> => {
+    if (!tab?.attributes?.tempo) return
+    const tempo = tab.attributes.tempo
+    const store = useMetronomeStore.getState()
+    const activePlaybackBpm = store.overrideBpm ?? store.bpm
+
+    if (store.isPlaying) {
+      if (activePlaybackBpm === tempo) {
+        store.stop()
+      } else {
+        store.setOverrideBpm(tempo)
+      }
+    } else {
+      await store.start(tempo)
+    }
+  }, [tab])
 
   // Load PDF Document
   useEffect(() => {
@@ -832,9 +845,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                 </button>
 
                 {/* Metronome & Saved Tempo */}
-                <div className="pdf-metronome-wrap">
+                <div
+                  className={`pdf-metronome-wrap ${tab?.attributes?.tempo ? 'joined' : ''} ${isMetronomePlaying ? 'metronome-active' : ''}`}
+                >
                   <button
-                    className={`pdf-tool-btn icon-only single-btn ${isMetronomePlaying ? 'metronome-active' : ''}`}
+                    className={
+                      tab?.attributes?.tempo
+                        ? 'pdf-metronome-btn'
+                        : `pdf-tool-btn icon-only single-btn ${isMetronomePlaying ? 'metronome-active' : ''}`
+                    }
                     onClick={() => useMetronomeStore.getState().toggleOpen()}
                     title={
                       isMetronomePlaying
@@ -849,14 +868,28 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                     {isMetronomePlaying && <span className="metronome-active-indicator" />}
                   </button>
                   {tab?.attributes?.tempo ? (
-                    <button
-                      className="pdf-tempo-badge"
-                      onClick={() => useMetronomeStore.getState().toggleOpen()}
-                      title={`Saved Tempo: ${tab.attributes.tempo} BPM - Click to open Metronome`}
-                    >
-                      <span className="tempo-note">♩</span>
-                      <span className="tempo-bpm">{tab.attributes.tempo}</span>
-                    </button>
+                    <>
+                      <div className="pdf-metronome-divider" />
+                      <button
+                        className={`pdf-tempo-badge ${isMetronomePlaying && metronomeBpm === tab.attributes.tempo ? 'active' : ''}`}
+                        onClick={handleToggleSavedTempoMetronome}
+                        title={
+                          isMetronomePlaying && metronomeBpm === tab.attributes.tempo
+                            ? `Stop Metronome (${tab.attributes.tempo} BPM)`
+                            : isMetronomePlaying
+                              ? `Set Metronome to ${tab.attributes.tempo} BPM`
+                              : `Start Metronome (${tab.attributes.tempo} BPM)`
+                        }
+                        aria-label={
+                          isMetronomePlaying && metronomeBpm === tab.attributes.tempo
+                            ? `Stop Metronome (${tab.attributes.tempo} BPM)`
+                            : `Start Metronome (${tab.attributes.tempo} BPM)`
+                        }
+                      >
+                        <span className="tempo-note">♩</span>
+                        <span className="tempo-bpm">{tab.attributes.tempo}</span>
+                      </button>
+                    </>
                   ) : null}
                 </div>
 

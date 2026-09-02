@@ -3494,11 +3494,74 @@ body {
   }
 }
 
-/* PDF Toolbar Metronome Wrap & Tempo Badge */
+/* PDF Toolbar Metronome Wrap & Joined Tempo Badge */
 .pdf-metronome-wrap {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  position: relative;
+}
+
+.pdf-metronome-wrap.joined {
+  background: #1c1c26;
+  border: 1px solid rgba(187, 134, 252, 0.35);
+  border-radius: 8px;
+  overflow: hidden;
+  height: 28px;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.pdf-metronome-wrap.joined:hover {
+  border-color: rgba(187, 134, 252, 0.6);
+}
+
+.pdf-metronome-wrap.joined.metronome-active {
+  border-color: #bb86fc;
+  box-shadow: 0 0 10px rgba(187, 134, 252, 0.4);
+}
+
+.pdf-metronome-wrap.joined .pdf-metronome-btn {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  width: 28px;
+  height: 100%;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #bb86fc;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.pdf-metronome-wrap.joined .pdf-metronome-btn:hover {
+  background: rgba(187, 134, 252, 0.18);
+  color: #ffffff;
+}
+
+.pdf-metronome-wrap.joined.metronome-active .pdf-metronome-btn {
+  background: rgba(187, 134, 252, 0.2);
+  color: #bb86fc;
+}
+
+.pdf-metronome-wrap.joined.metronome-active .pdf-metronome-btn:hover {
+  background: rgba(187, 134, 252, 0.32);
+  color: #ffffff;
+}
+
+.pdf-metronome-wrap.joined .pdf-metronome-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(187, 134, 252, 0.25);
+  flex-shrink: 0;
+  align-self: center;
+  transition: background-color 0.2s ease;
+}
+
+.pdf-metronome-wrap.joined.metronome-active .pdf-metronome-divider {
+  background: rgba(187, 134, 252, 0.45);
 }
 
 .pdf-tempo-badge {
@@ -3523,6 +3586,61 @@ body {
   border-color: #bb86fc;
   color: #ffffff;
   box-shadow: 0 0 8px rgba(187, 134, 252, 0.3);
+}
+
+.pdf-tempo-badge.active {
+  background: rgba(187, 134, 252, 0.28);
+  border-color: #bb86fc;
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(187, 134, 252, 0.45);
+  animation: tempo-pulse 1.8s infinite ease-in-out;
+}
+
+.pdf-metronome-wrap.joined .pdf-tempo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(187, 134, 252, 0.08);
+  border: none;
+  border-radius: 0;
+  height: 100%;
+  padding: 0 8px;
+  color: #bb86fc;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1;
+  box-shadow: none;
+  transition: all 0.15s ease;
+}
+
+.pdf-metronome-wrap.joined .pdf-tempo-badge:hover {
+  background: rgba(187, 134, 252, 0.22);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.pdf-metronome-wrap.joined .pdf-tempo-badge.active {
+  background: rgba(187, 134, 252, 0.3);
+  color: #ffffff;
+  animation: tempo-pulse 1.8s infinite ease-in-out;
+}
+
+.pdf-metronome-wrap.joined .pdf-tempo-badge.active:hover {
+  background: rgba(187, 134, 252, 0.42);
+}
+
+@keyframes tempo-pulse {
+  0% {
+    box-shadow: 0 0 6px rgba(187, 134, 252, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(187, 134, 252, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 6px rgba(187, 134, 252, 0.3);
+  }
 }
 
 .pdf-tempo-badge .tempo-note {
