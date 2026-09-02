@@ -35,7 +35,10 @@ export async function analyzeGpFile(file: File): Promise<GpAnalysisResult> {
 
       if (staff.tuning && staff.tuning.length > 0) {
         try {
-          const noteNames = staff.tuning.map((midiNote) =>
+          // alphaTab stores tuning from highest string (1) to lowest string (N).
+          // Reverse so tuning is evaluated in standard musical order: lowest to highest string (e.g. E A D G B E)
+          const lowToHighTuning = [...staff.tuning].reverse()
+          const noteNames = lowToHighTuning.map((midiNote) =>
             alphaTab.model.Tuning.getTextForTuning(midiNote, false)
           )
           const notesStr = noteNames.join(' ')
@@ -62,26 +65,58 @@ export async function analyzeGpFile(file: File): Promise<GpAnalysisResult> {
           } else if (notesStr === 'D A D G A D') {
             tuning = 'DADGAD'
           } else {
-            let rawName = staff.tuningName || staff.stringTuning?.name || ''
+            let rawName = (staff.tuningName || staff.stringTuning?.name || '').trim()
             rawName = rawName
               .replace(/^Guitar\s+/i, '')
               .replace(/Tune down\s+½\s+step/i, 'Eb Standard')
+              .replace(/\s+tuning$/i, '')
+              .trim()
             if (
               rawName &&
-              rawName.toLowerCase() !== 'standard' &&
+              !/^standard$/i.test(rawName) &&
+              !/^stamdadd$/i.test(rawName) &&
               rawName.toLowerCase() !== 'custom'
             ) {
               tuning = rawName
+            } else if (/^standard$/i.test(rawName) || /^stamdadd$/i.test(rawName)) {
+              tuning = 'Standard'
             } else {
               tuning = notesStr
             }
           }
         } catch {
-          tuning = staff.tuningName || 'Standard'
+          const rawName = (staff.tuningName || '')
+            .replace(/^Guitar\s+/i, '')
+            .replace(/\s+tuning$/i, '')
+            .trim()
+          if (!rawName || /^standard$/i.test(rawName) || /^stamdadd$/i.test(rawName)) {
+            tuning = 'Standard'
+          } else {
+            tuning = rawName
+          }
         }
       } else if (staff.tuningName) {
-        tuning = staff.tuningName.replace(/^Guitar\s+/i, '')
+        const rawName = staff.tuningName
+          .replace(/^Guitar\s+/i, '')
+          .replace(/\s+tuning$/i, '')
+          .trim()
+        if (!rawName || /^standard$/i.test(rawName) || /^stamdadd$/i.test(rawName)) {
+          tuning = 'Standard'
+        } else {
+          tuning = rawName
+        }
       }
+    }
+
+    // Final normalization: ensure any variation of Standard / Standard tuning is 'Standard'
+    if (
+      !tuning ||
+      /^standard(?:\s+tuning)?$/i.test(tuning.trim()) ||
+      /^stamdadd(?:\s+tuning)?$/i.test(tuning.trim())
+    ) {
+      tuning = 'Standard'
+    } else {
+      tuning = tuning.replace(/\s+tuning$/i, '').trim()
     }
 
     return { tuning, capo, tempo, title, artist }

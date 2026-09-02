@@ -73,8 +73,17 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   }, [fileName, initialAttributes])
 
   useEffect(() => {
+    const normalizeTuning = (t?: string): string => {
+      if (!t) return 'Standard'
+      const trimmed = t.trim()
+      if (/^standard(?:\s+tuning)?$/i.test(trimmed) || /^stamdadd(?:\s+tuning)?$/i.test(trimmed)) {
+        return 'Standard'
+      }
+      return trimmed
+    }
+
     if (initialAttributes) {
-      setTuning(initialAttributes.tuning || 'Standard')
+      setTuning(normalizeTuning(initialAttributes.tuning))
       setCapo(initialAttributes.capo !== undefined ? initialAttributes.capo : '')
       setTempo(initialAttributes.tempo !== undefined ? initialAttributes.tempo : '')
       setStatus(
@@ -85,7 +94,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     } else if (suggestedAttributes) {
       // Use suggested attributes from PDF/GP analysis
       if (suggestedAttributes.tuning) {
-        setTuning(suggestedAttributes.tuning)
+        setTuning(normalizeTuning(suggestedAttributes.tuning))
       }
       if (suggestedAttributes.capo !== undefined) {
         setCapo(suggestedAttributes.capo)
@@ -110,9 +119,17 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 
     setIsSubmitting(true)
     try {
+      const trimmedTuning = (tuning || '').trim()
+      const normalizedTuning =
+        !trimmedTuning ||
+        /^standard(?:\s+tuning)?$/i.test(trimmedTuning) ||
+        /^stamdadd(?:\s+tuning)?$/i.test(trimmedTuning)
+          ? 'Standard'
+          : trimmedTuning
+
       const finalAttributes: ITabAttributes = {
         ...initialAttributes,
-        tuning: tuning || 'Standard',
+        tuning: normalizedTuning,
         capo: capo === '' ? 0 : Number(capo),
         tempo: tempo === '' ? undefined : Number(tempo),
         status,

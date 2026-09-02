@@ -190,12 +190,27 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     return options
   }, [tabs])
 
+  const normalizeTabTunings = (files: IGuitarTab[]): IGuitarTab[] => {
+    return files.map((tab) => {
+      const t = (tab.attributes?.tuning || '').trim()
+      if (/^standard\s+tuning$/i.test(t) || /^stamdadd\s+tuning$/i.test(t)) {
+        const updatedAttrs = { ...tab.attributes, tuning: 'Standard' }
+        api.updateAttributes(tab.id, updatedAttrs).catch((err) => {
+          console.error('[FileBrowser] Failed to auto-migrate tuning for tab:', tab.name, err)
+        })
+        return { ...tab, attributes: updatedAttrs }
+      }
+      return tab
+    })
+  }
+
   const loadTabs = async (showSpinner = true): Promise<IGuitarTab[]> => {
     try {
       if (showSpinner) setLoading(true)
       const files = await api.getFiles()
-      setTabs(files)
-      return files
+      const normalizedFiles = normalizeTabTunings(files)
+      setTabs(normalizedFiles)
+      return normalizedFiles
     } catch (e) {
       console.error(e)
       return []
@@ -210,7 +225,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       const settings = await api.getSettings()
       if (settings) {
         if (settings.defaultSortMode) setSortMode(settings.defaultSortMode)
-        if (settings.defaultTuning) setSelectedTuning(settings.defaultTuning)
+        if (settings.defaultTuning) {
+          const norm =
+            /^standard(?:\s+tuning)?$/i.test(settings.defaultTuning.trim()) ||
+            /^stamdadd(?:\s+tuning)?$/i.test(settings.defaultTuning.trim())
+              ? 'Standard'
+              : settings.defaultTuning
+          setSelectedTuning(norm)
+        }
         if (settings.defaultCapo !== undefined) setCapoFilter(settings.defaultCapo.toString())
         if (settings.defaultFileType) setFileTypeFilter(settings.defaultFileType)
         if (settings.defaultStatusFilter && Array.isArray(settings.defaultStatusFilter)) {
@@ -247,7 +269,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         const files = await api.getFiles()
         if (files.length > 0) {
           if (isMounted) {
-            setTabs(files)
+            const normalizedFiles = normalizeTabTunings(files)
+            setTabs(normalizedFiles)
             setLoading(false)
             await applyDefaults()
           }
@@ -656,7 +679,21 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   // Extract unique tunings from current tabs, always ensuring 'Standard' is the first option
   const availableTunings = React.useMemo(() => {
-    const tunings = new Set(tabs.map((t) => t.attributes?.tuning).filter(Boolean))
+    const tunings = new Set(
+      tabs
+        .map((t) => {
+          const tuning = (t.attributes?.tuning || '').trim()
+          if (!tuning) return ''
+          if (
+            /^standard(?:\s+tuning)?$/i.test(tuning) ||
+            /^stamdadd(?:\s+tuning)?$/i.test(tuning)
+          ) {
+            return 'Standard'
+          }
+          return tuning
+        })
+        .filter(Boolean)
+    )
     tunings.delete('Standard') // Remove to control precise position
     const sortedOthers = Array.from(tunings).sort()
     return ['Standard', ...sortedOthers] as string[]
@@ -709,7 +746,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       }
 
       // 5. Tuning Filter
-      if (selectedTuning && tab.attributes?.tuning !== selectedTuning) return false
+      if (selectedTuning) {
+        const tabTuning = (tab.attributes?.tuning || '').trim()
+        const normalizedTabTuning =
+          /^standard(?:\s+tuning)?$/i.test(tabTuning) || /^stamdadd(?:\s+tuning)?$/i.test(tabTuning)
+            ? 'Standard'
+            : tabTuning
+        if (normalizedTabTuning !== selectedTuning) return false
+      }
 
       // 6. File Type Filter
       if (fileTypeFilter !== 'all') {
