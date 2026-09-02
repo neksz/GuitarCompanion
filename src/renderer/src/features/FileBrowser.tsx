@@ -74,6 +74,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [pdfAnalysis, setPdfAnalysis] = useState<{
     tuning: string
     capo: number
+    tempo?: number
     previewBase64: string | null
   } | null>(null)
   const [editTab, setEditTab] = useState<IGuitarTab | null>(null)
@@ -113,6 +114,66 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     window.addEventListener('resize', handleScroll)
     return () => window.removeEventListener('resize', handleScroll)
   }, [handleScroll])
+
+  // Listen for tempo updates from MetronomeModal / GpViewer
+  useEffect(() => {
+    const handleTempoSaved = (e: Event): void => {
+      const customEvent = e as CustomEvent<{
+        tabId: string
+        tempo: number
+        attributes?: ITabAttributes
+      }>
+      const { tabId, tempo, attributes } = customEvent.detail || {}
+      if (!tabId) return
+
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id === tabId) {
+            return {
+              ...t,
+              attributes: {
+                ...t.attributes,
+                ...(attributes || {}),
+                tempo
+              }
+            }
+          }
+          return t
+        })
+      )
+
+      setPdfViewerTab((prev) => {
+        if (prev && prev.id === tabId) {
+          return {
+            ...prev,
+            attributes: {
+              ...prev.attributes,
+              ...(attributes || {}),
+              tempo
+            }
+          }
+        }
+        return prev
+      })
+
+      setGpViewerTab((prev) => {
+        if (prev && prev.id === tabId) {
+          return {
+            ...prev,
+            attributes: {
+              ...prev.attributes,
+              ...(attributes || {}),
+              tempo
+            }
+          }
+        }
+        return prev
+      })
+    }
+
+    window.addEventListener('guitar-companion:tempo-saved', handleTempoSaved)
+    return () => window.removeEventListener('guitar-companion:tempo-saved', handleTempoSaved)
+  }, [])
 
   // Extract unique file types from current tabs
   const availableFileTypes = React.useMemo(() => {
@@ -323,6 +384,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           setPdfAnalysis({
             tuning: result.tuning,
             capo: result.capo,
+            tempo: result.tempo,
             previewBase64: null
           })
         } catch (err) {
@@ -673,6 +735,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         } else if (sortConfig.key === 'capo') {
           aValue = a.attributes?.capo || 0
           bValue = b.attributes?.capo || 0
+        } else if (sortConfig.key === 'tempo') {
+          aValue = a.attributes?.tempo || 0
+          bValue = b.attributes?.tempo || 0
         } else if (sortConfig.key === 'status') {
           aValue = a.attributes?.status || 'None'
           bValue = b.attributes?.status || 'None'
@@ -1403,7 +1468,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                     style={{
                       padding: '12px 16px',
                       fontWeight: 600,
-                      width: 100,
+                      width: 110,
                       cursor: 'pointer',
                       userSelect: 'none'
                     }}
@@ -1415,34 +1480,17 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                   </th>
                   <th
                     className="desktop-only"
-                    onClick={() => handleSort('capo')}
+                    onClick={() => handleSort('status')}
                     style={{
                       padding: '12px 16px',
                       fontWeight: 600,
-                      width: 80,
+                      width: 180,
                       cursor: 'pointer',
                       userSelect: 'none'
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Capo{' '}
-                      {sortConfig.key === 'capo' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                    </div>
-                  </th>
-                  <th
-                    className="desktop-only"
-                    onClick={() => handleSort('status')}
-                    style={{
-                      padding: '12px 16px',
-                      fontWeight: 600,
-                      width: ['played', 'created', 'recent', 'time'].includes(sortMode) ? 180 : 110,
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      transition: 'width 0.2s ease-in-out'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                      Status{' '}
+                      Status & Stats{' '}
                       {sortConfig.key === 'status' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
                     </div>
                   </th>
@@ -1490,7 +1538,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         {getFileIcon(tab.name)}
                       </div>
                       <div
-                        style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          flex: 1,
+                          minWidth: 0,
+                          gap: 3
+                        }}
                       >
                         <span
                           className="tab-name"
@@ -1505,18 +1559,28 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         >
                           {tab.attributes?.displayName || tab.name}
                         </span>
-                        {tab.attributes?.displayName && (
-                          <span
+
+                        {((tab.attributes?.capo && tab.attributes.capo > 0) ||
+                          (tab.attributes?.tempo && tab.attributes.tempo > 0)) && (
+                          <div
+                            className="desktop-only-inline-badges"
                             style={{
-                              fontSize: 11,
-                              color: '#aaa',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6
                             }}
                           >
-                            {tab.name}
-                          </span>
+                            {tab.attributes?.capo && tab.attributes.capo > 0 ? (
+                              <span className="table-badge capo-badge">
+                                Capo {tab.attributes.capo}
+                              </span>
+                            ) : null}
+                            {tab.attributes?.tempo && tab.attributes.tempo > 0 ? (
+                              <span className="table-badge tempo-badge">
+                                ♩ {tab.attributes.tempo} BPM
+                              </span>
+                            ) : null}
+                          </div>
                         )}
                       </div>
 
@@ -1567,20 +1631,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                     <td
                       className="desktop-only"
                       style={{
-                        padding: '14px 16px',
-                        color: '#888',
-                        fontSize: 13,
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      {tab.attributes?.capo && tab.attributes.capo > 0
-                        ? `Capo ${tab.attributes.capo}`
-                        : '-'}
-                    </td>
-
-                    <td
-                      className="desktop-only"
-                      style={{
                         padding: '10px 16px',
                         whiteSpace: 'nowrap',
                         verticalAlign: 'middle'
@@ -1590,11 +1640,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: 4,
+                          gap: 3,
                           justifyContent: 'center'
                         }}
                       >
-                        {/* Tier 1: Status Tag */}
+                        {/* Status Tag */}
                         {tab.attributes?.status && tab.attributes.status !== 'None' ? (
                           <div>
                             <span
@@ -1624,7 +1674,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           </div>
                         ) : null}
 
-                        {/* Tier 2: Practice Timer / Play Stats */}
+                        {/* Practice Time: ALWAYS shown when > 0 */}
                         {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 ? (
                           <div
                             style={{
@@ -1644,20 +1694,26 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                               </span>
                             )}
                           </div>
-                        ) : sortMode === 'played' && (tab.attributes?.timesPlayed || 0) > 0 ? (
+                        ) : null}
+
+                        {/* Secondary info (Viewed / Added / Plays) - independent of practice time */}
+                        {sortMode === 'created' && tab.attributes?.createdAt ? (
+                          <div style={{ fontSize: 11, color: '#777' }}>
+                            Added {formatDate(tab.attributes.createdAt)}
+                          </div>
+                        ) : sortMode === 'played' &&
+                          (tab.attributes?.timesPlayed || 0) > 0 &&
+                          !(tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0) ? (
                           <div style={{ fontSize: 12, color: '#888' }}>
                             {tab.attributes.timesPlayed} play
                             {tab.attributes.timesPlayed !== 1 ? 's' : ''}
                           </div>
-                        ) : sortMode === 'created' && tab.attributes?.createdAt ? (
-                          <div style={{ fontSize: 11, color: '#777' }}>
-                            Added {formatDate(tab.attributes.createdAt)}
-                          </div>
-                        ) : sortMode === 'recent' && tab.attributes?.lastAccessed ? (
+                        ) : tab.attributes?.lastAccessed ? (
                           <div style={{ fontSize: 11, color: '#777' }}>
                             Viewed {formatDate(tab.attributes.lastAccessed)}
                           </div>
-                        ) : !tab.attributes?.status || tab.attributes.status === 'None' ? (
+                        ) : (!tab.attributes?.status || tab.attributes.status === 'None') &&
+                          (!tab.attributes?.secondsPlayed || tab.attributes.secondsPlayed <= 0) ? (
                           <span style={{ color: '#555', fontSize: 13 }}>-</span>
                         ) : null}
                       </div>
@@ -1753,36 +1809,49 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                       </div>
                     </td>
 
-                    <td className="cell-metadata mobile-only" style={{ padding: '0 16px 14px' }}>
-                      <div
-                        className="metadata-row"
-                        style={{
-                          display: 'flex',
-                          gap: 12,
-                          alignItems: 'center',
-                          fontSize: 13,
-                          color: '#aaa'
-                        }}
-                      >
-                        <span className="mobile-only-inline">
+                    <td className="cell-metadata mobile-only">
+                      <div className="metadata-row">
+                        {/* Tuning chip */}
+                        <span className="metadata-chip tuning-chip">
                           {tab.attributes?.tuning || 'Standard'}
                         </span>
-                        <span className="mobile-only-inline">
-                          {tab.attributes?.capo && tab.attributes.capo > 0
-                            ? `Capo ${tab.attributes.capo}`
-                            : 'No Capo'}
-                        </span>
-                        {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 && (
-                          <span className="mobile-only-inline" style={{ color: '#888' }}>
-                            ⏱ {formatPlayDuration(tab.attributes.secondsPlayed)}
+
+                        {/* Capo chip - only when > 0 */}
+                        {tab.attributes?.capo && tab.attributes.capo > 0 ? (
+                          <span className="metadata-chip capo-chip">
+                            Capo {tab.attributes.capo}
+                          </span>
+                        ) : null}
+
+                        {/* Tempo chip - only when > 0 */}
+                        {tab.attributes?.tempo && tab.attributes.tempo > 0 ? (
+                          <span className="metadata-chip tempo-chip">
+                            ♩ {tab.attributes.tempo} BPM
+                          </span>
+                        ) : null}
+
+                        {/* Practice time chip - ALWAYS when > 0 */}
+                        {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 ? (
+                          <span className="metadata-chip time-chip">
+                            <Icons.Clock size={11} style={{ color: '#bb86fc', flexShrink: 0 }} />
+                            {formatPlayDuration(tab.attributes.secondsPlayed)}
+                          </span>
+                        ) : null}
+
+                        {/* Viewed date chip */}
+                        {tab.attributes?.lastAccessed && (
+                          <span className="metadata-chip date-chip">
+                            Viewed {formatDate(tab.attributes.lastAccessed)}
                           </span>
                         )}
+
+                        {/* Status badge chip */}
                         {tab.attributes?.status && tab.attributes.status !== 'None' && (
                           <span
                             className="status-badge"
                             style={{
-                              padding: '2px 6px',
-                              borderRadius: 4,
+                              padding: '2px 7px',
+                              borderRadius: 5,
                               fontSize: 10,
                               fontWeight: 600,
                               background:
@@ -1856,7 +1925,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             batchProgress={{ current: currentUploadIndex + 1, total: uploadQueue.length }}
             pdfPreview={pdfAnalysis?.previewBase64}
             suggestedAttributes={
-              pdfAnalysis ? { tuning: pdfAnalysis.tuning, capo: pdfAnalysis.capo } : undefined
+              pdfAnalysis
+                ? {
+                    tuning: pdfAnalysis.tuning,
+                    capo: pdfAnalysis.capo,
+                    tempo: pdfAnalysis.tempo
+                  }
+                : undefined
             }
             existingFileNames={tabs.map((t) => t.name)}
             onSkip={handleSkip}
@@ -1889,6 +1964,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           <PdfViewer
             url={pdfViewerUrl}
             name={pdfViewerName}
+            tab={pdfViewerTab}
             initialSecondsPlayed={pdfViewerTab?.attributes?.secondsPlayed || 0}
             onClose={handleClosePdfViewer}
           />
@@ -1898,6 +1974,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           <GpViewer
             data={gpViewerData}
             name={gpViewerName}
+            tab={gpViewerTab}
             initialSecondsPlayed={gpViewerTab?.attributes?.secondsPlayed || 0}
             onClose={handleCloseGpViewer}
           />

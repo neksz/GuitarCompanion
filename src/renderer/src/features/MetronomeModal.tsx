@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Save, Check, Loader2 } from 'lucide-react'
 import { Icons } from '../components/Icons'
 import { useMetronomeStore } from '../utils/useMetronomeStore'
 import { getTempoName, SOUND_OPTIONS } from '../utils/metronomeHelpers'
@@ -24,17 +24,34 @@ export const MetronomeModal: React.FC = () => {
     volume,
     setVolume,
     tapTempo,
-    playTestClick
+    playTestClick,
+    activeTabId,
+    activeTabName,
+    activeTabAttributes,
+    saveTempoToActiveTab
   } = useMetronomeStore()
 
   const [isEditingBpm, setIsEditingBpm] = useState(false)
   const [bpmInputVal, setBpmInputVal] = useState(bpm.toString())
   const [isTapping, setIsTapping] = useState(false)
   const [isSoundCollapsed, setIsSoundCollapsed] = useState(true)
+  const [isSavingTempo, setIsSavingTempo] = useState(false)
+  const [saveTempoSuccess, setSaveTempoSuccess] = useState(false)
   const [portalTarget, setPortalTarget] = useState<Element | null>(() =>
     typeof document !== 'undefined' ? document.fullscreenElement || document.body : null
   )
   const tapTimeoutRef = useRef<number | null>(null)
+
+  const handleSaveTempoToTab = async (): Promise<void> => {
+    if (isSavingTempo || !activeTabId) return
+    setIsSavingTempo(true)
+    const success = await saveTempoToActiveTab()
+    setIsSavingTempo(false)
+    if (success) {
+      setSaveTempoSuccess(true)
+      setTimeout(() => setSaveTempoSuccess(false), 2200)
+    }
+  }
 
   // Listen for fullscreen change so modal portals into the fullscreen container (e.g. PDF viewer)
   useEffect(() => {
@@ -410,6 +427,42 @@ export const MetronomeModal: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Row 4.5: Tab Tempo Save Bar (Only rendered when viewing a tab) */}
+        {activeTabId && (
+          <div className="metronome-tab-save-bar">
+            <div className="tab-save-info">
+              <span className="tab-save-badge">TAB</span>
+              <span className="tab-save-name" title={activeTabName || 'Active Tab'}>
+                {activeTabName || 'Active Tab'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className={`metronome-save-tab-btn ${saveTempoSuccess || activeTabAttributes?.tempo === bpm ? 'success' : ''}`}
+              onClick={handleSaveTempoToTab}
+              disabled={isSavingTempo}
+              title={`Save ${bpm} BPM to ${activeTabName || 'tab'} metadata`}
+            >
+              {isSavingTempo ? (
+                <>
+                  <Loader2 size={13} className="spin-icon" />
+                  <span>Saving...</span>
+                </>
+              ) : saveTempoSuccess || activeTabAttributes?.tempo === bpm ? (
+                <>
+                  <Check size={13} />
+                  <span>Saved ({bpm} BPM)</span>
+                </>
+              ) : (
+                <>
+                  <Save size={13} />
+                  <span>Save {bpm} BPM to Tab</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Row 5: Primary Action Button (Play / Stop) */}
         <div className="metronome-footer-actions">

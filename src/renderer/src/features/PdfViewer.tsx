@@ -32,6 +32,7 @@ import { useMetronomeStore } from '../utils/useMetronomeStore'
 interface PdfViewerProps {
   url: string
   name: string
+  tab?: { id: string; name: string; attributes?: { tempo?: number; [key: string]: unknown } } | null
   initialSecondsPlayed?: number
   onClose: (elapsedSeconds?: number) => void
 }
@@ -231,6 +232,7 @@ const PdfPage: React.FC<PdfPageProps> = ({
 export const PdfViewer: React.FC<PdfViewerProps> = ({
   url,
   name,
+  tab,
   initialSecondsPlayed = 0,
   onClose
 }) => {
@@ -388,13 +390,21 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     checkAutoFullscreen()
   }, [])
 
-  // Stop metronome when opening viewer or closing/unmounting viewer
+  // Sync active tab context and stop metronome on open/close
   useEffect(() => {
     useMetronomeStore.getState().stop()
+    if (tab) {
+      useMetronomeStore.getState().setActiveTab(tab.id, tab.name, tab.attributes)
+      if (tab.attributes?.tempo && tab.attributes.tempo > 0) {
+        // Silently set BPM to tab's saved tempo without auto-starting or opening modal
+        useMetronomeStore.getState().setBpm(tab.attributes.tempo)
+      }
+    }
     return () => {
       useMetronomeStore.getState().stop()
+      useMetronomeStore.getState().setActiveTab(null, null, null)
     }
-  }, [])
+  }, [tab])
 
   const handleClose = useCallback((): void => {
     if (document.fullscreenElement) {
@@ -821,20 +831,34 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
                   <RotateCw size={16} />
                 </button>
 
-                {/* Metronome */}
-                <button
-                  className={`pdf-tool-btn icon-only single-btn ${isMetronomePlaying ? 'metronome-active' : ''}`}
-                  onClick={() => useMetronomeStore.getState().toggleOpen()}
-                  title={
-                    isMetronomePlaying
-                      ? `Metronome Active (${metronomeBpm} BPM) - Click to configure (M)`
-                      : 'Open Metronome (M)'
-                  }
-                  aria-label="Metronome"
-                >
-                  <Icons.Metronome size={16} />
-                  {isMetronomePlaying && <span className="metronome-active-indicator" />}
-                </button>
+                {/* Metronome & Saved Tempo */}
+                <div className="pdf-metronome-wrap">
+                  <button
+                    className={`pdf-tool-btn icon-only single-btn ${isMetronomePlaying ? 'metronome-active' : ''}`}
+                    onClick={() => useMetronomeStore.getState().toggleOpen()}
+                    title={
+                      isMetronomePlaying
+                        ? `Metronome Active (${metronomeBpm} BPM) - Click to configure (M)`
+                        : tab?.attributes?.tempo
+                          ? `Metronome (Saved: ${tab.attributes.tempo} BPM) - Click to configure (M)`
+                          : 'Open Metronome (M)'
+                    }
+                    aria-label="Metronome"
+                  >
+                    <Icons.Metronome size={16} />
+                    {isMetronomePlaying && <span className="metronome-active-indicator" />}
+                  </button>
+                  {tab?.attributes?.tempo ? (
+                    <button
+                      className="pdf-tempo-badge"
+                      onClick={() => useMetronomeStore.getState().toggleOpen()}
+                      title={`Saved Tempo: ${tab.attributes.tempo} BPM - Click to open Metronome`}
+                    >
+                      <span className="tempo-note">♩</span>
+                      <span className="tempo-bpm">{tab.attributes.tempo}</span>
+                    </button>
+                  ) : null}
+                </div>
 
                 {/* Fullscreen */}
                 <button
@@ -947,7 +971,12 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
             {/* Metronome Control on Mobile */}
             <div className="pdf-mobile-tools-section">
-              <div className="pdf-mobile-section-label">Metronome ({metronomeBpm} BPM)</div>
+              <div className="pdf-mobile-section-label">
+                Metronome ({metronomeBpm} BPM)
+                {tab?.attributes?.tempo ? (
+                  <span className="pdf-mobile-saved-tempo"> • Saved: {tab.attributes.tempo}</span>
+                ) : null}
+              </div>
               <div className="pdf-mobile-segmented">
                 <button
                   className={`pdf-mobile-segmented-btn ${!isMetronomePlaying ? 'active' : ''}`}

@@ -4,6 +4,7 @@ export interface ITabAttributes {
   isLearned?: boolean
   isLearning?: boolean
   capo?: number
+  tempo?: number
   artist?: string
   title?: string
   timesPlayed?: number

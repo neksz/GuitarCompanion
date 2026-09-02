@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createMetronomeEngine, MetronomeSound, MetronomeState } from '../services/metronomeAudio'
+import { api } from '../services/api'
 
 const STORAGE_KEY = 'guitar_companion_metronome_config'
 
@@ -37,6 +38,17 @@ export interface MetronomeStore extends MetronomeState {
   isPlaying: boolean
   currentBeat: number
   tapHistory: number[]
+
+  // Active tab context (set when a viewer is open)
+  activeTabId: string | null
+  activeTabName: string | null
+  activeTabAttributes: Record<string, unknown> | null
+  setActiveTab: (
+    id: string | null,
+    name: string | null,
+    attributes?: Record<string, unknown> | null
+  ) => void
+  saveTempoToActiveTab: () => Promise<boolean>
 
   // Modal actions
   open: () => void
@@ -82,6 +94,45 @@ export const useMetronomeStore = create<MetronomeStore>((set, get) => {
     isPlaying: false,
     currentBeat: -1,
     tapHistory: [],
+
+    activeTabId: null,
+    activeTabName: null,
+    activeTabAttributes: null,
+    setActiveTab: (
+      id: string | null,
+      name: string | null,
+      attributes?: Record<string, unknown> | null
+    ): void => {
+      set({
+        activeTabId: id,
+        activeTabName: name,
+        activeTabAttributes: attributes ?? null
+      })
+    },
+    saveTempoToActiveTab: async (): Promise<boolean> => {
+      const { activeTabId, activeTabAttributes, bpm } = get()
+      if (!activeTabId) return false
+      try {
+        const updatedAttrs = {
+          ...(activeTabAttributes || {}),
+          tempo: bpm
+        }
+        const res = await api.updateAttributes(activeTabId, updatedAttrs)
+        if (res.success) {
+          set({ activeTabAttributes: updatedAttrs })
+          window.dispatchEvent(
+            new CustomEvent('guitar-companion:tempo-saved', {
+              detail: { tabId: activeTabId, tempo: bpm, attributes: updatedAttrs }
+            })
+          )
+          return true
+        }
+        return false
+      } catch (err) {
+        console.error('Failed to save tempo to tab:', err)
+        return false
+      }
+    },
 
     bpm: Math.min(300, Math.max(30, saved.bpm ?? 120)),
     beatsPerMeasure: Math.min(16, Math.max(1, saved.beatsPerMeasure ?? 4)),

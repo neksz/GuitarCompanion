@@ -33,6 +33,11 @@ import { useMetronomeStore } from '../utils/useMetronomeStore'
 interface GpViewerProps {
   data: ArrayBuffer | Uint8Array | string
   name: string
+  tab?: {
+    id: string
+    name?: string
+    attributes?: { tempo?: number; [key: string]: unknown }
+  } | null
   initialSecondsPlayed?: number
   onClose: (elapsedSeconds?: number) => void
 }
@@ -153,11 +158,17 @@ interface PendingLoopRange {
 export const GpViewer: React.FC<GpViewerProps> = ({
   data,
   name,
+  tab,
   initialSecondsPlayed = 0,
   onClose
 }) => {
   // Prevent mobile & desktop screen from sleeping / dimming while viewing / playing Guitar Pro score
   useWakeLock(true)
+
+  const tabRef = useRef(tab)
+  useEffect(() => {
+    tabRef.current = tab
+  }, [tab])
 
   const sessionSecondsRef = useRef<number>(0)
   const [sessionSeconds, setSessionSeconds] = useState<number>(0)
@@ -1123,6 +1134,34 @@ export const GpViewer: React.FC<GpViewerProps> = ({
           if (score.tracks.length > 0) {
             updateTrackMeta(score.tracks[0])
             api.renderTracks([score.tracks[0]])
+          }
+
+          // Auto-save initial tempo from GP score if not already saved in tab metadata
+          const currentTab = tabRef.current
+          if (currentTab && !currentTab.attributes?.tempo && score.tempo && score.tempo > 0) {
+            const initialTempo = Math.round(score.tempo)
+            const updatedAttrs = {
+              ...(currentTab.attributes || {}),
+              tempo: initialTempo
+            }
+            globalApi
+              .updateAttributes(currentTab.id, updatedAttrs)
+              .then((res) => {
+                if (res?.success) {
+                  window.dispatchEvent(
+                    new CustomEvent('guitar-companion:tempo-saved', {
+                      detail: {
+                        tabId: currentTab.id,
+                        tempo: initialTempo,
+                        attributes: updatedAttrs
+                      }
+                    })
+                  )
+                }
+              })
+              .catch((err) => {
+                console.error('[GpViewer] Failed to auto-save initial tempo:', err)
+              })
           }
         })
 

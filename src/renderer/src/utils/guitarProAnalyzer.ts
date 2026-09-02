@@ -3,13 +3,14 @@ import * as alphaTab from '@coderline/alphatab'
 export interface GpAnalysisResult {
   tuning: string
   capo: number
+  tempo?: number
   title?: string
   artist?: string
 }
 
 /**
  * Parses Guitar Pro files (.gp3, .gp4, .gp5, .gpx, .gp) in the browser
- * and extracts the tuning, capo, title, and artist information.
+ * and extracts the tuning, capo, tempo, title, and artist information.
  */
 export async function analyzeGpFile(file: File): Promise<GpAnalysisResult> {
   try {
@@ -19,6 +20,7 @@ export async function analyzeGpFile(file: File): Promise<GpAnalysisResult> {
 
     let tuning = 'Standard'
     let capo = 0
+    const tempo = score.tempo && score.tempo > 0 ? Math.round(score.tempo) : undefined
     const title = score.title || ''
     const artist = score.artist || ''
 
@@ -82,7 +84,7 @@ export async function analyzeGpFile(file: File): Promise<GpAnalysisResult> {
       }
     }
 
-    return { tuning, capo, title, artist }
+    return { tuning, capo, tempo, title, artist }
   } catch (err) {
     console.error('[guitarProAnalyzer] Failed to analyze GP file:', err)
     return { tuning: 'Standard', capo: 0 }

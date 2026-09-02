@@ -10,7 +10,7 @@ interface UploadModalProps {
   isEditMode?: boolean
   batchProgress?: { current: number; total: number }
   pdfPreview?: string | null
-  suggestedAttributes?: { tuning?: string; capo?: number }
+  suggestedAttributes?: { tuning?: string; capo?: number; tempo?: number }
   existingFileNames?: string[]
   onSkip?: () => void
 }
@@ -29,6 +29,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
 }) => {
   const [tuning, setTuning] = useState('')
   const [capo, setCapo] = useState<number | ''>('')
+  const [tempo, setTempo] = useState<number | ''>('')
   const [status, setStatus] = useState<'To Learn' | 'Learning' | 'Learned' | 'None'>('None')
   const [isFavorite, setIsFavorite] = useState(false)
   const [resetPlaytime, setResetPlaytime] = useState(false)
@@ -75,18 +76,22 @@ export const UploadModal: React.FC<UploadModalProps> = ({
     if (initialAttributes) {
       setTuning(initialAttributes.tuning || 'Standard')
       setCapo(initialAttributes.capo !== undefined ? initialAttributes.capo : '')
+      setTempo(initialAttributes.tempo !== undefined ? initialAttributes.tempo : '')
       setStatus(
         (initialAttributes.status as 'To Learn' | 'Learning' | 'Learned' | 'None') || 'None'
       )
       setIsFavorite(!!initialAttributes.isFavorite)
       setDisplayName(initialAttributes.displayName || '')
     } else if (suggestedAttributes) {
-      // Use suggested attributes from PDF analysis
+      // Use suggested attributes from PDF/GP analysis
       if (suggestedAttributes.tuning) {
         setTuning(suggestedAttributes.tuning)
       }
       if (suggestedAttributes.capo !== undefined) {
         setCapo(suggestedAttributes.capo)
+      }
+      if (suggestedAttributes.tempo !== undefined) {
+        setTempo(suggestedAttributes.tempo)
       }
     }
   }, [initialAttributes, suggestedAttributes])
@@ -109,6 +114,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         ...initialAttributes,
         tuning: tuning || 'Standard',
         capo: capo === '' ? 0 : Number(capo),
+        tempo: tempo === '' ? undefined : Number(tempo),
         status,
         isFavorite,
         displayName: displayName || undefined
@@ -499,6 +505,44 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                     boxSizing: 'border-box',
                     cursor: isGpFile ? 'not-allowed' : 'text',
                     opacity: isGpFile ? 0.9 : 1
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+                  <label style={{ color: '#aaa', fontSize: 14 }}>Tempo (BPM)</label>
+                  {isGpFile && suggestedAttributes?.tempo !== undefined && !initialAttributes && (
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: '#bb86fc',
+                        marginLeft: 8,
+                        background: 'rgba(187, 134, 252, 0.12)',
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        fontWeight: 500
+                      }}
+                    >
+                      ⚡ Auto-detected from GP
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min="30"
+                  max="300"
+                  value={tempo}
+                  onChange={(e) => setTempo(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Optional (e.g. 120)"
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    backgroundColor: '#2b2b36',
+                    border: '1px solid #444',
+                    borderRadius: 4,
+                    color: '#fff',
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>

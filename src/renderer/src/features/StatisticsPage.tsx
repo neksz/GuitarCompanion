@@ -134,6 +134,50 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
     loadData(true)
   }, [])
 
+  // Listen for tempo updates from MetronomeModal / GpViewer
+  useEffect(() => {
+    const handleTempoSaved = (e: Event): void => {
+      const customEvent = e as CustomEvent<{
+        tabId: string
+        tempo: number
+        attributes?: Record<string, unknown>
+      }>
+      const { tabId, tempo, attributes } = customEvent.detail || {}
+      if (!tabId) return
+
+      setPdfViewerTab((prev) => {
+        if (prev && prev.id === tabId) {
+          return {
+            ...prev,
+            attributes: {
+              ...prev.attributes,
+              ...(attributes || {}),
+              tempo
+            }
+          }
+        }
+        return prev
+      })
+
+      setGpViewerTab((prev) => {
+        if (prev && prev.id === tabId) {
+          return {
+            ...prev,
+            attributes: {
+              ...prev.attributes,
+              ...(attributes || {}),
+              tempo
+            }
+          }
+        }
+        return prev
+      })
+    }
+
+    window.addEventListener('guitar-companion:tempo-saved', handleTempoSaved)
+    return () => window.removeEventListener('guitar-companion:tempo-saved', handleTempoSaved)
+  }, [])
+
   const overallStats: IOverallStats = useMemo(() => {
     return playSessionService.getOverallStats(sessions)
   }, [sessions])
@@ -622,6 +666,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
         <PdfViewer
           url={pdfViewerUrl}
           name={pdfViewerName}
+          tab={pdfViewerTab}
           initialSecondsPlayed={pdfViewerTab?.attributes?.secondsPlayed || 0}
           onClose={handleClosePdfViewer}
         />
@@ -631,6 +676,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
         <GpViewer
           data={gpViewerData}
           name={gpViewerName}
+          tab={gpViewerTab}
           initialSecondsPlayed={gpViewerTab?.attributes?.secondsPlayed || 0}
           onClose={handleCloseGpViewer}
         />
