@@ -44,7 +44,14 @@ const MainLayout: React.FC = () => {
   return (
     <div
       className="app-container"
-      style={{ display: 'flex', height: '100vh', background: '#0f0f13', flexDirection: 'row' }}
+      style={{
+        display: 'flex',
+        height: '100%',
+        width: '100%',
+        overflow: 'hidden',
+        background: '#0f0f13',
+        flexDirection: 'row'
+      }}
     >
       <Sidebar
         onSearch={setSearchQuery}
@@ -67,10 +74,12 @@ const MainLayout: React.FC = () => {
       <main
         style={{
           flex: 1,
+          height: '100%',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          position: 'relative'
+          position: 'relative',
+          minWidth: 0
         }}
       >
         {activeCategory === 'statistics' ? (

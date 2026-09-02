@@ -343,7 +343,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
               <Menu size={20} />
             </button>
           )}
-          <div>
+          <div className={styles.titleWrapper}>
             <h1 className={styles.title}>
               <BarChart3 className={styles.titleIcon} size={28} />
               Statistics
@@ -387,9 +387,9 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
             onClick={() => loadData(true)}
             disabled={loading || refreshing}
             title="Refresh statistics"
+            aria-label="Refresh statistics"
           >
-            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
-            <span>Refresh</span>
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
           </button>
         </div>
       </header>
@@ -485,7 +485,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
             </div>
           </div>
           <div className={styles.chartContainer}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={240}>
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#22222d" vertical={false} />
                 <XAxis
@@ -494,6 +494,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
                   tick={{ fill: '#888899', fontSize: 11 }}
                   tickLine={false}
                   axisLine={{ stroke: '#22222d' }}
+                  minTickGap={8}
                 />
                 <YAxis
                   stroke="#555566"
@@ -534,7 +535,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
             </div>
           </div>
           <div className={styles.chartContainer}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={240}>
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#22222d" vertical={false} />
                 <XAxis
@@ -543,6 +544,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
                   tick={{ fill: '#888899', fontSize: 11 }}
                   tickLine={false}
                   axisLine={{ stroke: '#22222d' }}
+                  minTickGap={8}
                 />
                 <YAxis
                   stroke="#555566"
@@ -661,6 +663,8 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
           </p>
         </div>
       )}
+
+      <div className={styles.bottomSpacer} />
 
       {pdfViewerUrl && (
         <PdfViewer
