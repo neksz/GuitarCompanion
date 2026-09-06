@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import { IGuitarTab, ITabAttributes } from '../../../shared/types'
 import { UploadModal } from './UploadModal'
 import { ConfirmationModal } from './ConfirmationModal'
@@ -90,6 +91,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [gpViewerData, setGpViewerData] = useState<ArrayBuffer | Uint8Array | string | null>(null)
   const [gpViewerName, setGpViewerName] = useState<string>('')
   const [gpViewerTab, setGpViewerTab] = useState<IGuitarTab | null>(null)
+  const [openingTabId, setOpeningTabId] = useState<string | null>(null)
   const [showFloatingSearch, setShowFloatingSearch] = useState(false)
   const isMetronomePlaying = useMetronomeStore((s) => s.isPlaying)
   const metronomeBpm = useMetronomeStore((s) => s.bpm)
@@ -522,6 +524,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   }
 
   const handleOpen = async (tab: IGuitarTab): Promise<void> => {
+    if (openingTabId) return
+    setOpeningTabId(tab.id)
     try {
       // Update last accessed timestamp
       await api.updateAttributes(tab.id, {
@@ -571,6 +575,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     } catch (e) {
       console.error(e)
       alert('Failed to open file')
+    } finally {
+      setOpeningTabId(null)
     }
   }
 
@@ -1655,16 +1661,22 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 {filteredTabs.map((tab) => (
                   <tr
                     key={tab.id}
-                    className="tab-row"
+                    className={`tab-row ${openingTabId === tab.id ? 'tab-row-opening' : ''}`}
                     style={{
                       borderBottom: '1px solid #2b2b36',
-                      cursor: 'pointer',
-                      transition: 'background 0.2s'
+                      cursor: openingTabId === tab.id ? 'default' : 'pointer',
+                      transition: 'background 0.2s, opacity 0.2s',
+                      opacity: openingTabId === tab.id ? 0.75 : 1,
+                      pointerEvents: openingTabId ? 'none' : 'auto'
                     }}
-                    onClick={() => handleOpen(tab)}
-                    title="Click to open"
-                    onMouseEnter={(e) => (e.currentTarget.style.background = '#25252e')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    onClick={() => !openingTabId && handleOpen(tab)}
+                    title={openingTabId === tab.id ? 'Opening tab...' : 'Click to open'}
+                    onMouseEnter={(e) => {
+                      if (openingTabId !== tab.id) e.currentTarget.style.background = '#25252e'
+                    }}
+                    onMouseLeave={(e) => {
+                      if (openingTabId !== tab.id) e.currentTarget.style.background = 'transparent'
+                    }}
                   >
                     <td
                       className="cell-main"
@@ -1680,7 +1692,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           width: 36,
                           height: 36,
                           borderRadius: 8,
-                          background: 'rgba(187, 134, 252, 0.1)',
+                          background:
+                            openingTabId === tab.id
+                              ? 'rgba(187, 134, 252, 0.2)'
+                              : 'rgba(187, 134, 252, 0.1)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -1688,7 +1703,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           flexShrink: 0
                         }}
                       >
-                        {getFileIcon(tab.name)}
+                        {openingTabId === tab.id ? (
+                          <Loader2 size={20} className="animate-spin" />
+                        ) : (
+                          getFileIcon(tab.name)
+                        )}
                       </div>
                       <div
                         style={{

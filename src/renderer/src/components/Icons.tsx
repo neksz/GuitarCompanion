@@ -30,11 +30,13 @@ import {
   Square,
   Sparkles,
   ArrowUp,
-  Tag
+  Tag,
+  Loader2
 } from 'lucide-react'
 import { MetronomeIcon } from './MetronomeIcon'
 
 export const Icons = {
+  Loader2,
   Music,
   Settings,
   LogOut,
