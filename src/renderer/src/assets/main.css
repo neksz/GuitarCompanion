@@ -331,6 +331,17 @@ body {
     color: #ddd;
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.14);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .metadata-chip.capo-chip:hover {
+    filter: brightness(1.2);
+    transform: translateY(-1.5px);
+  }
+
+  .metadata-chip.capo-chip:active {
+    transform: translateY(0);
   }
 
   .metadata-chip.tempo-chip {
@@ -348,6 +359,20 @@ body {
   .metadata-chip.date-chip {
     color: #888898;
     font-size: 10.5px;
+  }
+
+  .metadata-chip.tag-chip {
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .metadata-chip.tag-chip:hover {
+    filter: brightness(1.2);
+    transform: translateY(-1.5px);
+  }
+
+  .metadata-chip.tag-chip:active {
+    transform: translateY(0);
   }
 }
 
@@ -377,12 +402,55 @@ body {
   background: rgba(255, 255, 255, 0.07);
   color: #c0c0cf;
   border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  user-select: none;
+}
+
+.table-badge.capo-badge:hover {
+  filter: brightness(1.2);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1.5px);
+}
+
+.table-badge.capo-badge:active {
+  transform: translateY(0);
 }
 
 .table-badge.tempo-badge {
   background: rgba(187, 134, 252, 0.12);
   color: #bb86fc;
   border: 1px solid rgba(187, 134, 252, 0.25);
+}
+
+.table-badge.tag-badge {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  user-select: none;
+}
+
+.table-badge.tag-badge:hover {
+  filter: brightness(1.2);
+  transform: translateY(-1.5px);
+}
+
+.table-badge.tag-badge:active {
+  transform: translateY(0);
+}
+
+.status-badge {
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  user-select: none;
+}
+
+.status-badge:hover {
+  filter: brightness(1.25);
+  transform: translateY(-1.5px);
+}
+
+.status-badge:active {
+  transform: translateY(0);
 }
 
 .animate-spin {

@@ -10,6 +10,8 @@ export interface ITabAttributes {
   timesPlayed?: number
   secondsPlayed?: number
   displayName?: string
+  tags?: string[]
+  tagColors?: Record<string, string>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any
 }

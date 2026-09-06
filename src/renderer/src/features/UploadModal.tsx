@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { ITabAttributes } from '../../../shared/types'
 import { Icons } from '../components/Icons'
+import { TagInfo, getTagColor, PREDEFINED_TAG_COLORS } from '../utils/tagUtils'
+import { DarkCreatableSelect } from '../components/DarkSelect'
+import { getDarkSelectStyles } from '../components/darkSelectStyles'
 
 interface UploadModalProps {
   fileName: string
@@ -12,6 +15,7 @@ interface UploadModalProps {
   pdfPreview?: string | null
   suggestedAttributes?: { tuning?: string; capo?: number; tempo?: number }
   existingFileNames?: string[]
+  existingTags?: TagInfo[]
   onSkip?: () => void
 }
 
@@ -25,6 +29,7 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   pdfPreview,
   suggestedAttributes,
   existingFileNames = [],
+  existingTags = [],
   onSkip
 }) => {
   const [tuning, setTuning] = useState('')
@@ -35,6 +40,10 @@ export const UploadModal: React.FC<UploadModalProps> = ({
   const [resetPlaytime, setResetPlaytime] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
+  const [tags, setTags] = useState<string[]>([])
+  const [tagColors, setTagColors] = useState<Record<string, string>>({})
+  const [activeTagColor, setActiveTagColor] = useState<string>('blue')
+  const [tagSearchInput, setTagSearchInput] = useState('')
   const [currentFileName, setCurrentFileName] = useState(() => {
     const lastDotIndex = fileName.lastIndexOf('.')
     if (lastDotIndex !== -1) {
@@ -91,6 +100,8 @@ export const UploadModal: React.FC<UploadModalProps> = ({
       )
       setIsFavorite(!!initialAttributes.isFavorite)
       setDisplayName(initialAttributes.displayName || '')
+      setTags(Array.isArray(initialAttributes.tags) ? [...initialAttributes.tags] : [])
+      setTagColors(initialAttributes.tagColors ? { ...initialAttributes.tagColors } : {})
     } else if (suggestedAttributes) {
       // Use suggested attributes from PDF/GP analysis
       if (suggestedAttributes.tuning) {
@@ -134,7 +145,9 @@ export const UploadModal: React.FC<UploadModalProps> = ({
         tempo: tempo === '' ? undefined : Number(tempo),
         status,
         isFavorite,
-        displayName: displayName || undefined
+        displayName: displayName || undefined,
+        tags: tags.length > 0 ? tags : undefined,
+        tagColors: Object.keys(tagColors).length > 0 ? tagColors : undefined
       }
 
       if (resetPlaytime) {
@@ -588,6 +601,253 @@ export const UploadModal: React.FC<UploadModalProps> = ({
                   <option value="Learning">Learning</option>
                   <option value="Learned">Learned</option>
                 </select>
+              </div>
+
+              {/* Tags Section */}
+              <div style={{ marginBottom: 20 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icons.Tag size={15} style={{ color: '#bb86fc' }} />
+                    <label style={{ color: '#aaa', fontSize: 14, fontWeight: 500 }}>Tags</label>
+                  </div>
+                  {tags.length > 0 && (
+                    <span style={{ fontSize: 11, color: '#888' }}>
+                      {tags.length} {tags.length === 1 ? 'tag' : 'tags'} assigned
+                    </span>
+                  )}
+                </div>
+
+                {/* Assigned tags list */}
+                {tags.length > 0 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 8,
+                      marginBottom: 10,
+                      padding: '8px 10px',
+                      backgroundColor: '#22222c',
+                      borderRadius: 6,
+                      border: '1px solid #3b3b48'
+                    }}
+                  >
+                    {tags.map((tagName) => {
+                      const tagColorObj = getTagColor(tagName, tagColors[tagName])
+                      return (
+                        <div
+                          key={tagName}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '3px 8px 3px 10px',
+                            borderRadius: 14,
+                            backgroundColor: tagColorObj.bg,
+                            border: `1px solid ${tagColorObj.border}`,
+                            color: tagColorObj.color,
+                            fontSize: 12,
+                            fontWeight: 500
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              backgroundColor: tagColorObj.color,
+                              display: 'inline-block'
+                            }}
+                          />
+                          <span>{tagName}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTags((prev) => prev.filter((t) => t !== tagName))
+                              setTagColors((prev) => {
+                                const copy = { ...prev }
+                                delete copy[tagName]
+                                return copy
+                              })
+                            }}
+                            title={`Remove tag "${tagName}"`}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: tagColorObj.color,
+                              cursor: 'pointer',
+                              padding: '0 2px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: 0.75,
+                              transition: 'opacity 0.15s'
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.75')}
+                          >
+                            <Icons.X size={13} />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: '#777',
+                      fontStyle: 'italic',
+                      marginBottom: 10
+                    }}
+                  >
+                    No tags assigned. Search existing tags or create a new one below.
+                  </div>
+                )}
+
+                {/* Creatable React Select search input */}
+                <div style={{ marginBottom: 10 }}>
+                  <DarkCreatableSelect
+                    inputValue={tagSearchInput}
+                    onInputChange={(val) => setTagSearchInput(val)}
+                    value={null}
+                    onChange={(option) => {
+                      if (!option) return
+                      const opt = option as {
+                        value: string
+                        label: string
+                        count?: number
+                        color?: string
+                      }
+                      const name = opt.value.trim()
+                      if (!name || tags.includes(name)) return
+                      setTags((prev) => [...prev, name])
+                      if (opt.color) {
+                        setTagColors((prev) => ({ ...prev, [name]: opt.color! }))
+                      }
+                      setTagSearchInput('')
+                    }}
+                    onCreateOption={(inputValue) => {
+                      const name = inputValue.trim()
+                      if (!name || tags.includes(name)) return
+                      setTags((prev) => [...prev, name])
+                      setTagColors((prev) => ({ ...prev, [name]: activeTagColor }))
+                      setTagSearchInput('')
+                    }}
+                    options={(existingTags || [])
+                      .filter((t) => !tags.includes(t.name))
+                      .map((t) => ({
+                        value: t.name,
+                        label: t.name,
+                        count: t.count,
+                        color: t.color
+                      }))}
+                    placeholder="Search existing tags or type to create..."
+                    isClearable={false}
+                    formatCreateLabel={(input) => `+ Create tag: "${input}"`}
+                    formatOptionLabel={(option) => {
+                      const opt = option as {
+                        value: string
+                        label: string
+                        count?: number
+                        color?: string
+                      }
+                      const optColor = getTagColor(opt.label, opt.color)
+                      return (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            width: '100%'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                backgroundColor: optColor.color,
+                                display: 'inline-block'
+                              }}
+                            />
+                            <span style={{ fontWeight: 500, color: '#eee' }}>{opt.label}</span>
+                          </div>
+                          {opt.count !== undefined && (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: '#888',
+                                background: 'rgba(255,255,255,0.06)',
+                                padding: '2px 6px',
+                                borderRadius: 4
+                              }}
+                            >
+                              {opt.count} {opt.count === 1 ? 'tab' : 'tabs'}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    }}
+                    styles={getDarkSelectStyles({
+                      accentColor: '#bb86fc'
+                    })}
+                    noOptionsMessage={() =>
+                      tagSearchInput
+                        ? `Press Enter to create "${tagSearchInput}"`
+                        : 'No matching tags found'
+                    }
+                  />
+                </div>
+
+                {/* Color swatches for creating new tags */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 10px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: 6,
+                    border: '1px solid rgba(255, 255, 255, 0.06)'
+                  }}
+                >
+                  <span style={{ fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>
+                    New tag color:
+                  </span>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {PREDEFINED_TAG_COLORS.map((c) => {
+                      const isSelected = activeTagColor === c.id
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setActiveTagColor(c.id)}
+                          title={c.name}
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: '50%',
+                            backgroundColor: c.color,
+                            border: isSelected ? '2px solid #fff' : '2px solid transparent',
+                            boxShadow: isSelected ? `0 0 6px ${c.color}` : 'none',
+                            cursor: 'pointer',
+                            padding: 0,
+                            transition: 'all 0.15s ease',
+                            transform: isSelected ? 'scale(1.2)' : 'scale(1)'
+                          }}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div

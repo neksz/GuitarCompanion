@@ -29,7 +29,8 @@ import {
   Play,
   Square,
   Sparkles,
-  ArrowUp
+  ArrowUp,
+  Tag
 } from 'lucide-react'
 import { MetronomeIcon } from './MetronomeIcon'
 
@@ -65,5 +66,6 @@ export const Icons = {
   Square,
   Sparkles,
   ArrowUp,
+  Tag,
   Metronome: MetronomeIcon
 }

@@ -10,6 +10,9 @@ import { playSessionService } from '../services/PlaySessionService'
 import { analyzePdfInBrowser } from '../utils/browserPdfAnalyzer'
 import { analyzeGpFile } from '../utils/guitarProAnalyzer'
 import { useMetronomeStore } from '../utils/useMetronomeStore'
+import { extractAllTags, getTagColor } from '../utils/tagUtils'
+import { DarkSelect, DarkMultiSelect } from '../components/DarkSelect'
+import { getDarkSelectStyles } from '../components/darkSelectStyles'
 
 interface FileBrowserProps {
   searchQuery?: string
@@ -59,6 +62,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [tabs, setTabs] = useState<IGuitarTab[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([])
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [selectedTuning, setSelectedTuning] = useState<string>('')
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' | null }>({
     key: '',
@@ -699,6 +703,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     return ['Standard', ...sortedOthers] as string[]
   }, [tabs])
 
+  // Extract unique tags from tabs sorted by usage count
+  const availableTags = React.useMemo(() => extractAllTags(tabs), [tabs])
+
   const handleSort = (key: string): void => {
     setSortMode('alpha') // Reset to default mode when using manual column sorting
     setSortConfig((prev) => {
@@ -724,7 +731,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       if (searchQuery) {
         const query = searchQuery.toLowerCase()
         const displayName = (tab.attributes?.displayName || '').toLowerCase()
-        if (!title.includes(query) && !tuning.includes(query) && !displayName.includes(query))
+        const tabTags = tab.attributes?.tags || []
+        const tagMatch = tabTags.some((t: string) => t.toLowerCase().includes(query))
+        if (
+          !title.includes(query) &&
+          !tuning.includes(query) &&
+          !displayName.includes(query) &&
+          !tagMatch
+        )
           return false
       }
 
@@ -759,6 +773,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       if (fileTypeFilter !== 'all') {
         const type = getFileType(tab.name)
         if (type !== fileTypeFilter) return false
+      }
+
+      // 7. Tags Filter (multi-select, tab must have all selected tags)
+      if (selectedTags.length > 0) {
+        const tabTags = tab.attributes?.tags || []
+        const hasAllSelectedTags = selectedTags.every((st) => tabTags.includes(st))
+        if (!hasAllSelectedTags) return false
       }
 
       return true
@@ -829,6 +850,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     searchQuery,
     activeCategory,
     selectedStatuses,
+    selectedTags,
     selectedTuning,
     capoFilter,
     sortConfig,
@@ -1264,186 +1286,273 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
           <div
             className="filter-bar"
-            style={{ display: 'flex', gap: '12px 24px', alignItems: 'center', flexWrap: 'wrap' }}
+            style={{
+              display: 'flex',
+              gap: '10px 14px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              padding: '4px 0'
+            }}
           >
-            {/* Status Group */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {['To Learn', 'Learning', 'Learned', 'None'].map((s) => (
-                <button
-                  key={s}
-                  onClick={() =>
-                    setSelectedStatuses((prev) =>
-                      prev.includes(s) ? prev.filter((st) => st !== s) : [...prev, s]
+            {/* Status Dropdown */}
+            <div style={{ minWidth: 140, maxWidth: 200, flex: '1 1 auto' }}>
+              <DarkMultiSelect
+                closeMenuOnSelect={false}
+                placeholder="Status..."
+                value={selectedStatuses.map((s) => ({ value: s, label: s }))}
+                onChange={(selected) => {
+                  setSelectedStatuses(
+                    (selected as { value: string; label: string }[]).map((s) => s.value)
+                  )
+                }}
+                options={[
+                  { value: 'To Learn', label: 'To Learn' },
+                  { value: 'Learning', label: 'Learning' },
+                  { value: 'Learned', label: 'Learned' },
+                  { value: 'None', label: 'None' }
+                ]}
+                styles={getDarkSelectStyles({
+                  compact: true,
+                  accentColor: '#bb86fc'
+                })}
+              />
+            </div>
+
+            {/* Tags Dropdown */}
+            {availableTags.length > 0 && (
+              <div style={{ minWidth: 150, maxWidth: 240, flex: '1 1 auto' }}>
+                <DarkMultiSelect
+                  closeMenuOnSelect={false}
+                  placeholder="Tags..."
+                  value={selectedTags.map((tagName) => {
+                    const info = availableTags.find((t) => t.name === tagName)
+                    return {
+                      value: tagName,
+                      label: tagName,
+                      color: info?.color,
+                      count: info?.count
+                    }
+                  })}
+                  onChange={(selected) => {
+                    setSelectedTags(
+                      (selected as { value: string; label: string }[]).map((t) => t.value)
                     )
-                  }
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 12,
-                    border: '1px solid ' + (selectedStatuses.includes(s) ? '#bb86fc' : '#444'),
-                    background: selectedStatuses.includes(s)
-                      ? 'rgba(187, 134, 252, 0.15)'
-                      : 'transparent',
-                    color: selectedStatuses.includes(s) ? '#bb86fc' : '#888',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
                   }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-
-            <div
-              className="desktop-only"
-              style={{ width: 1, height: 20, background: '#444' }}
-            ></div>
-
-            {/* File Type Filter - Only show if we have different types or if filtered */}
-            {availableFileTypes.length > 1 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: '#aaa',
-                    marginRight: 4,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    fontWeight: 600
+                  options={availableTags.map((t) => ({
+                    value: t.name,
+                    label: t.name,
+                    count: t.count,
+                    color: t.color
+                  }))}
+                  formatOptionLabel={(option) => {
+                    const opt = option as {
+                      value: string
+                      label: string
+                      count?: number
+                      color?: string
+                    }
+                    const optColor = getTagColor(opt.label, opt.color)
+                    return (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          width: '100%'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span
+                            style={{
+                              width: 7,
+                              height: 7,
+                              borderRadius: '50%',
+                              backgroundColor: optColor.color,
+                              display: 'inline-block'
+                            }}
+                          />
+                          <span>{opt.label}</span>
+                        </div>
+                        {opt.count !== undefined && (
+                          <span style={{ fontSize: 10, color: '#888' }}>({opt.count})</span>
+                        )}
+                      </div>
+                    )
                   }}
-                >
-                  Type
-                </span>
-                {availableFileTypes.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => setFileTypeFilter(t.id as 'all' | 'pdf' | 'gp' | 'txt')}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: 12,
-                      border: '1px solid ' + (fileTypeFilter === t.id ? '#03dac6' : '#444'),
-                      background:
-                        fileTypeFilter === t.id ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
-                      color: fileTypeFilter === t.id ? '#03dac6' : '#888',
-                      fontSize: 12,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {availableTunings.length > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-                <div
-                  className="desktop-only"
-                  style={{ width: 1, height: 20, background: '#444' }}
-                ></div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {availableTunings.map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setSelectedTuning((prev) => (prev === t ? '' : t))}
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: 12,
-                        border: '1px solid ' + (selectedTuning === t ? '#03dac6' : '#444'),
-                        background:
-                          selectedTuning === t ? 'rgba(3, 218, 198, 0.15)' : 'transparent',
-                        color: selectedTuning === t ? '#03dac6' : '#888',
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-              <div
-                className="desktop-only"
-                style={{ width: 1, height: 20, background: '#444' }}
-              ></div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: '#aaa',
-                    marginRight: 4,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.05em',
-                    fontWeight: 600
-                  }}
-                >
-                  Sort by
-                </span>
-                {[
-                  { id: 'recent', label: 'Recent' },
-                  { id: 'created', label: 'Added' },
-                  { id: 'time', label: 'Time' },
-                  { id: 'played', label: 'Plays' },
-                  { id: 'alpha', label: 'A-Z' }
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => {
-                      setSortMode(m.id as 'alpha' | 'created' | 'recent' | 'played' | 'time')
-                      setSortConfig({ key: '', direction: null })
-                    }}
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: 12,
-                      border: '1px solid ' + (sortMode === m.id ? '#bb86fc' : '#444'),
-                      background: sortMode === m.id ? 'rgba(187, 134, 252, 0.15)' : 'transparent',
-                      color: sortMode === m.id ? '#bb86fc' : '#888',
-                      fontSize: 12,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      fontWeight: sortMode === m.id ? 600 : 400
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-              <div
-                className="desktop-only"
-                style={{ width: 1, height: 20, background: '#444' }}
-              ></div>
-              {/* Capo Filter Input */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: '#888' }}>Capo:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="12"
-                  placeholder="#"
-                  value={capoFilter}
-                  onChange={(e) => setCapoFilter(e.target.value)}
-                  className="no-spin"
-                  style={{
-                    width: 30,
-                    background: '#2b2b36',
-                    border: '1px solid ' + (capoFilter ? '#bb86fc' : '#444'),
-                    borderRadius: 4,
-                    color: '#fff',
-                    padding: '4px 8px',
-                    fontSize: 12,
-                    textAlign: 'center'
-                  }}
+                  styles={getDarkSelectStyles({
+                    compact: true,
+                    accentColor: '#bb86fc'
+                  })}
                 />
               </div>
+            )}
+
+            {/* Tuning Dropdown */}
+            {availableTunings.length > 0 && (
+              <div style={{ minWidth: 130, maxWidth: 170, flex: '0 1 auto' }}>
+                <DarkSelect
+                  isClearable={false}
+                  placeholder="Tuning..."
+                  value={
+                    selectedTuning
+                      ? { value: selectedTuning, label: selectedTuning }
+                      : { value: '', label: 'All Tunings' }
+                  }
+                  onChange={(selected) => {
+                    const val = (selected as { value: string; label: string })?.value || ''
+                    setSelectedTuning(val)
+                  }}
+                  options={[
+                    { value: '', label: 'All Tunings' },
+                    ...availableTunings.map((t) => ({ value: t, label: t }))
+                  ]}
+                  styles={getDarkSelectStyles({
+                    compact: true,
+                    accentColor: '#03dac6'
+                  })}
+                />
+              </div>
+            )}
+
+            {/* File Type Dropdown */}
+            {availableFileTypes.length > 1 && (
+              <div style={{ minWidth: 115, maxWidth: 140, flex: '0 1 auto' }}>
+                <DarkSelect
+                  isClearable={false}
+                  placeholder="Type..."
+                  value={
+                    availableFileTypes
+                      .map((t) => ({ value: t.id, label: t.label }))
+                      .find((o) => o.value === fileTypeFilter) || {
+                      value: 'all',
+                      label: 'All Types'
+                    }
+                  }
+                  onChange={(selected) => {
+                    const val = (selected as { value: 'all' | 'pdf' | 'gp' | 'txt'; label: string })
+                      ?.value
+                    if (val) setFileTypeFilter(val)
+                  }}
+                  options={availableFileTypes.map((t) => ({ value: t.id, label: t.label }))}
+                  styles={getDarkSelectStyles({
+                    compact: true,
+                    accentColor: '#03dac6'
+                  })}
+                />
+              </div>
+            )}
+
+            {/* Sort Dropdown */}
+            <div style={{ minWidth: 125, maxWidth: 155, flex: '0 1 auto' }}>
+              <DarkSelect
+                isClearable={false}
+                placeholder="Sort by..."
+                value={
+                  [
+                    { value: 'recent', label: 'Recent' },
+                    { value: 'created', label: 'Added' },
+                    { value: 'time', label: 'Practice Time' },
+                    { value: 'played', label: 'Play Count' },
+                    { value: 'alpha', label: 'A-Z' }
+                  ].find((o) => o.value === sortMode) || { value: 'recent', label: 'Recent' }
+                }
+                onChange={(selected) => {
+                  const val = (
+                    selected as {
+                      value: 'alpha' | 'created' | 'recent' | 'played' | 'time'
+                    }
+                  )?.value
+                  if (val) {
+                    setSortMode(val)
+                    setSortConfig({ key: '', direction: null })
+                  }
+                }}
+                options={[
+                  { value: 'recent', label: 'Recent' },
+                  { value: 'created', label: 'Added' },
+                  { value: 'time', label: 'Practice Time' },
+                  { value: 'played', label: 'Play Count' },
+                  { value: 'alpha', label: 'A-Z' }
+                ]}
+                styles={getDarkSelectStyles({
+                  compact: true,
+                  accentColor: '#bb86fc'
+                })}
+              />
             </div>
+
+            {/* Capo Filter Input */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <span style={{ fontSize: 12, color: '#888' }}>Capo:</span>
+              <input
+                type="number"
+                min="0"
+                max="12"
+                placeholder="#"
+                value={capoFilter}
+                onChange={(e) => setCapoFilter(e.target.value)}
+                className="no-spin"
+                style={{
+                  width: 32,
+                  height: 34,
+                  background: '#22222c',
+                  border: '1px solid ' + (capoFilter ? '#bb86fc' : 'rgba(255, 255, 255, 0.12)'),
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 12,
+                  textAlign: 'center',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {/* Reset/Clear All Filters Button */}
+            {(selectedStatuses.length > 0 ||
+              selectedTags.length > 0 ||
+              fileTypeFilter !== 'all' ||
+              selectedTuning !== '' ||
+              capoFilter !== '') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStatuses([])
+                  setSelectedTags([])
+                  setFileTypeFilter('all')
+                  setSelectedTuning('')
+                  setCapoFilter('')
+                }}
+                title="Clear all active filters"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  color: '#aaa',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  height: 34,
+                  boxSizing: 'border-box',
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#fff'
+                  e.currentTarget.style.borderColor = '#bb86fc'
+                  e.currentTarget.style.background = 'rgba(187, 134, 252, 0.12)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#aaa'
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)'
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)'
+                }}
+              >
+                <Icons.X size={13} />
+                Clear Filters
+              </button>
+            )}
           </div>
         </div>
 
@@ -1590,40 +1699,145 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           gap: 3
                         }}
                       >
-                        <span
-                          className="tab-name"
+                        <div
                           style={{
-                            fontWeight: 500,
-                            fontSize: 14,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: 'block'
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            minWidth: 0
                           }}
                         >
-                          {tab.attributes?.displayName || tab.name}
-                        </span>
+                          <span
+                            className="tab-name"
+                            style={{
+                              fontWeight: 500,
+                              fontSize: 14,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}
+                          >
+                            {tab.attributes?.displayName || tab.name}
+                          </span>
+                          {tab.attributes?.tempo && tab.attributes.tempo > 0 ? (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 400,
+                                color: '#8e8ea0',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                flexShrink: 0,
+                                letterSpacing: '0.01em'
+                              }}
+                              title={`Tempo: ${tab.attributes.tempo} BPM`}
+                            >
+                              <span style={{ fontSize: 13, color: '#bb86fc', lineHeight: 1 }}>
+                                ♩
+                              </span>
+                              <span>{tab.attributes.tempo} BPM</span>
+                            </span>
+                          ) : null}
+                        </div>
 
                         {((tab.attributes?.capo && tab.attributes.capo > 0) ||
-                          (tab.attributes?.tempo && tab.attributes.tempo > 0)) && (
+                          (tab.attributes?.tags && tab.attributes.tags.length > 0)) && (
                           <div
                             className="desktop-only-inline-badges"
                             style={{
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 6
+                              gap: 6,
+                              flexWrap: 'wrap',
+                              marginTop: 2
                             }}
                           >
-                            {tab.attributes?.capo && tab.attributes.capo > 0 ? (
-                              <span className="table-badge capo-badge">
-                                Capo {tab.attributes.capo}
-                              </span>
-                            ) : null}
-                            {tab.attributes?.tempo && tab.attributes.tempo > 0 ? (
-                              <span className="table-badge tempo-badge">
-                                ♩ {tab.attributes.tempo} BPM
-                              </span>
-                            ) : null}
+                            {tab.attributes?.capo && tab.attributes.capo > 0
+                              ? (() => {
+                                  const isCapoFiltered = capoFilter === String(tab.attributes.capo)
+                                  return (
+                                    <span
+                                      className="table-badge capo-badge"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setCapoFilter((prev) =>
+                                          prev === String(tab.attributes.capo)
+                                            ? ''
+                                            : String(tab.attributes.capo)
+                                        )
+                                      }}
+                                      title={
+                                        isCapoFiltered
+                                          ? 'Remove Capo filter'
+                                          : `Filter by Capo ${tab.attributes.capo}`
+                                      }
+                                      style={{
+                                        cursor: 'pointer',
+                                        ...(isCapoFiltered
+                                          ? {
+                                              borderColor: '#bb86fc',
+                                              color: '#bb86fc',
+                                              background: 'rgba(187, 134, 252, 0.2)',
+                                              boxShadow: '0 0 6px rgba(187, 134, 252, 0.4)'
+                                            }
+                                          : {})
+                                      }}
+                                    >
+                                      Capo {tab.attributes.capo}
+                                    </span>
+                                  )
+                                })()
+                              : null}
+                            {tab.attributes?.tags?.map((tagName: string) => {
+                              const tagColor = getTagColor(
+                                tagName,
+                                tab.attributes?.tagColors?.[tagName]
+                              )
+                              const isFiltered = selectedTags.includes(tagName)
+                              return (
+                                <span
+                                  key={tagName}
+                                  className="table-badge tag-badge"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSelectedTags((prev) =>
+                                      prev.includes(tagName)
+                                        ? prev.filter((t) => t !== tagName)
+                                        : [...prev, tagName]
+                                    )
+                                  }}
+                                  title={
+                                    isFiltered
+                                      ? `Remove filter "${tagName}"`
+                                      : `Filter by tag "${tagName}"`
+                                  }
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    padding: '2px 7px',
+                                    borderRadius: 10,
+                                    fontSize: 11,
+                                    fontWeight: 500,
+                                    backgroundColor: tagColor.bg,
+                                    border: `1px solid ${isFiltered ? '#fff' : tagColor.border}`,
+                                    color: tagColor.color,
+                                    boxShadow: isFiltered ? `0 0 6px ${tagColor.color}` : 'none'
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      width: 5,
+                                      height: 5,
+                                      borderRadius: '50%',
+                                      backgroundColor: tagColor.color
+                                    }}
+                                  />
+                                  {tagName}
+                                </span>
+                              )
+                            })}
                           </div>
                         )}
                       </div>
@@ -1689,34 +1903,59 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         }}
                       >
                         {/* Status Tag */}
-                        {tab.attributes?.status && tab.attributes.status !== 'None' ? (
-                          <div>
-                            <span
-                              className="status-badge"
-                              style={{
-                                display: 'inline-block',
-                                padding: '2px 8px',
-                                borderRadius: 4,
-                                fontSize: 10,
-                                fontWeight: 600,
-                                background:
-                                  tab.attributes.status === 'Learned'
-                                    ? 'rgba(76, 175, 80, 0.18)'
-                                    : tab.attributes.status === 'Learning'
-                                      ? 'rgba(255, 193, 7, 0.18)'
-                                      : 'rgba(255, 255, 255, 0.08)',
-                                color:
-                                  tab.attributes.status === 'Learned'
-                                    ? '#4caf50'
-                                    : tab.attributes.status === 'Learning'
-                                      ? '#ffc107'
-                                      : '#aaa'
-                              }}
-                            >
-                              {tab.attributes.status}
-                            </span>
-                          </div>
-                        ) : null}
+                        {tab.attributes?.status && tab.attributes.status !== 'None'
+                          ? (() => {
+                              const status = tab.attributes.status
+                              const isFiltered = selectedStatuses.includes(status)
+                              return (
+                                <div>
+                                  <span
+                                    className="status-badge"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedStatuses((prev) =>
+                                        prev.includes(status)
+                                          ? prev.filter((s) => s !== status)
+                                          : [...prev, status]
+                                      )
+                                    }}
+                                    title={
+                                      isFiltered
+                                        ? `Remove filter "${status}"`
+                                        : `Filter by status "${status}"`
+                                    }
+                                    style={{
+                                      display: 'inline-block',
+                                      padding: '2px 8px',
+                                      borderRadius: 4,
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      background:
+                                        status === 'Learned'
+                                          ? 'rgba(76, 175, 80, 0.18)'
+                                          : status === 'Learning'
+                                            ? 'rgba(255, 193, 7, 0.18)'
+                                            : 'rgba(255, 255, 255, 0.08)',
+                                      color:
+                                        status === 'Learned'
+                                          ? '#4caf50'
+                                          : status === 'Learning'
+                                            ? '#ffc107'
+                                            : '#aaa',
+                                      border: isFiltered
+                                        ? `1px solid ${status === 'Learned' ? '#4caf50' : status === 'Learning' ? '#ffc107' : '#aaa'}`
+                                        : '1px solid transparent',
+                                      boxShadow: isFiltered
+                                        ? `0 0 6px ${status === 'Learned' ? 'rgba(76, 175, 80, 0.4)' : status === 'Learning' ? 'rgba(255, 193, 7, 0.4)' : 'rgba(255, 255, 255, 0.2)'}`
+                                        : 'none'
+                                    }}
+                                  >
+                                    {status}
+                                  </span>
+                                </div>
+                              )
+                            })()
+                          : null}
 
                         {/* Practice Time: ALWAYS shown when > 0 */}
                         {tab.attributes?.secondsPlayed && tab.attributes.secondsPlayed > 0 ? (
@@ -1860,12 +2099,81 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           {tab.attributes?.tuning || 'Standard'}
                         </span>
 
+                        {/* Tag chips */}
+                        {tab.attributes?.tags?.map((tagName: string) => {
+                          const tagColor = getTagColor(
+                            tagName,
+                            tab.attributes?.tagColors?.[tagName]
+                          )
+                          const isFiltered = selectedTags.includes(tagName)
+                          return (
+                            <span
+                              key={tagName}
+                              className="metadata-chip tag-chip"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedTags((prev) =>
+                                  prev.includes(tagName)
+                                    ? prev.filter((t) => t !== tagName)
+                                    : [...prev, tagName]
+                                )
+                              }}
+                              style={{
+                                backgroundColor: tagColor.bg,
+                                borderColor: isFiltered ? '#fff' : tagColor.border,
+                                color: tagColor.color
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 5,
+                                  height: 5,
+                                  borderRadius: '50%',
+                                  backgroundColor: tagColor.color
+                                }}
+                              />
+                              {tagName}
+                            </span>
+                          )
+                        })}
+
                         {/* Capo chip - only when > 0 */}
-                        {tab.attributes?.capo && tab.attributes.capo > 0 ? (
-                          <span className="metadata-chip capo-chip">
-                            Capo {tab.attributes.capo}
-                          </span>
-                        ) : null}
+                        {tab.attributes?.capo && tab.attributes.capo > 0
+                          ? (() => {
+                              const isCapoFiltered = capoFilter === String(tab.attributes.capo)
+                              return (
+                                <span
+                                  className="metadata-chip capo-chip"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setCapoFilter((prev) =>
+                                      prev === String(tab.attributes.capo)
+                                        ? ''
+                                        : String(tab.attributes.capo)
+                                    )
+                                  }}
+                                  title={
+                                    isCapoFiltered
+                                      ? 'Remove Capo filter'
+                                      : `Filter by Capo ${tab.attributes.capo}`
+                                  }
+                                  style={{
+                                    cursor: 'pointer',
+                                    ...(isCapoFiltered
+                                      ? {
+                                          borderColor: '#bb86fc',
+                                          color: '#bb86fc',
+                                          background: 'rgba(187, 134, 252, 0.2)',
+                                          boxShadow: '0 0 6px rgba(187, 134, 252, 0.4)'
+                                        }
+                                      : {})
+                                  }}
+                                >
+                                  Capo {tab.attributes.capo}
+                                </span>
+                              )
+                            })()
+                          : null}
 
                         {/* Tempo chip - only when > 0 */}
                         {tab.attributes?.tempo && tab.attributes.tempo > 0 ? (
@@ -1890,31 +2198,57 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         )}
 
                         {/* Status badge chip */}
-                        {tab.attributes?.status && tab.attributes.status !== 'None' && (
-                          <span
-                            className="status-badge"
-                            style={{
-                              padding: '2px 7px',
-                              borderRadius: 5,
-                              fontSize: 10,
-                              fontWeight: 600,
-                              background:
-                                tab.attributes.status === 'Learned'
-                                  ? 'rgba(76, 175, 80, 0.2)'
-                                  : tab.attributes.status === 'Learning'
-                                    ? 'rgba(255, 193, 7, 0.2)'
-                                    : 'rgba(255, 255, 255, 0.1)',
-                              color:
-                                tab.attributes.status === 'Learned'
-                                  ? '#4caf50'
-                                  : tab.attributes.status === 'Learning'
-                                    ? '#ffc107'
-                                    : '#aaa'
-                            }}
-                          >
-                            {tab.attributes.status}
-                          </span>
-                        )}
+                        {tab.attributes?.status && tab.attributes.status !== 'None'
+                          ? (() => {
+                              const status = tab.attributes.status
+                              const isFiltered = selectedStatuses.includes(status)
+                              return (
+                                <span
+                                  className="status-badge"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSelectedStatuses((prev) =>
+                                      prev.includes(status)
+                                        ? prev.filter((s) => s !== status)
+                                        : [...prev, status]
+                                    )
+                                  }}
+                                  title={
+                                    isFiltered
+                                      ? `Remove filter "${status}"`
+                                      : `Filter by status "${status}"`
+                                  }
+                                  style={{
+                                    cursor: 'pointer',
+                                    padding: '2px 7px',
+                                    borderRadius: 5,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    background:
+                                      status === 'Learned'
+                                        ? 'rgba(76, 175, 80, 0.2)'
+                                        : status === 'Learning'
+                                          ? 'rgba(255, 193, 7, 0.2)'
+                                          : 'rgba(255, 255, 255, 0.1)',
+                                    color:
+                                      status === 'Learned'
+                                        ? '#4caf50'
+                                        : status === 'Learning'
+                                          ? '#ffc107'
+                                          : '#aaa',
+                                    border: isFiltered
+                                      ? `1px solid ${status === 'Learned' ? '#4caf50' : status === 'Learning' ? '#ffc107' : '#aaa'}`
+                                      : '1px solid transparent',
+                                    boxShadow: isFiltered
+                                      ? `0 0 6px ${status === 'Learned' ? 'rgba(76, 175, 80, 0.4)' : status === 'Learning' ? 'rgba(255, 193, 7, 0.4)' : 'rgba(255, 255, 255, 0.2)'}`
+                                      : 'none'
+                                  }}
+                                >
+                                  {status}
+                                </span>
+                              )
+                            })()
+                          : null}
                       </div>
                     </td>
                   </tr>
@@ -1978,6 +2312,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 : undefined
             }
             existingFileNames={tabs.map((t) => t.name)}
+            existingTags={availableTags}
             onSkip={handleSkip}
           />
         )}
@@ -1988,6 +2323,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             initialAttributes={editTab.attributes}
             isEditMode={true}
             existingFileNames={tabs.map((t) => t.name)}
+            existingTags={availableTags}
             onConfirm={handleConfirmEdit}
             onCancel={() => setEditTab(null)}
           />
