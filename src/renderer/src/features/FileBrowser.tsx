@@ -14,6 +14,7 @@ import { useMetronomeStore } from '../utils/useMetronomeStore'
 import { extractAllTags, getTagColor } from '../utils/tagUtils'
 import { DarkSelect, DarkMultiSelect } from '../components/DarkSelect'
 import { getDarkSelectStyles } from '../components/darkSelectStyles'
+import { TabContextMenu } from '../components/TabContextMenu'
 
 interface FileBrowserProps {
   searchQuery?: string
@@ -92,6 +93,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [gpViewerName, setGpViewerName] = useState<string>('')
   const [gpViewerTab, setGpViewerTab] = useState<IGuitarTab | null>(null)
   const [openingTabId, setOpeningTabId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    tab: IGuitarTab
+    x: number
+    y: number
+  } | null>(null)
   const [showFloatingSearch, setShowFloatingSearch] = useState(false)
   const isMetronomePlaying = useMetronomeStore((s) => s.isPlaying)
   const metronomeBpm = useMetronomeStore((s) => s.bpm)
@@ -493,8 +499,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   }
 
   // Trigger Delete Logic
-  const handleDeleteClick = (e: React.MouseEvent, tab: IGuitarTab): void => {
-    e.stopPropagation()
+  const handleDeleteClick = (e: React.MouseEvent | undefined, tab: IGuitarTab): void => {
+    e?.stopPropagation()
     setDeleteTab(tab)
   }
 
@@ -520,6 +526,108 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       alert('Delete failed')
     } finally {
       setDeleteTab(null)
+    }
+  }
+
+  const handleTabContextMenu = (e: React.MouseEvent, tab: IGuitarTab): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({
+      tab,
+      x: e.clientX,
+      y: e.clientY
+    })
+  }
+
+  const handleQuickUpdateAttributes = async (
+    id: string,
+    attributes: ITabAttributes
+  ): Promise<void> => {
+    try {
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === id ? { ...t, attributes: { ...t.attributes, ...attributes } } : t
+        )
+      )
+      if (contextMenu && contextMenu.tab.id === id) {
+        setContextMenu((prev) =>
+          prev
+            ? {
+                ...prev,
+                tab: {
+                  ...prev.tab,
+                  attributes: { ...prev.tab.attributes, ...attributes }
+                }
+              }
+            : null
+        )
+      }
+
+      if (attributes.tempo !== undefined) {
+        window.dispatchEvent(
+          new CustomEvent('guitar-companion:tempo-saved', {
+            detail: { tabId: id, tempo: attributes.tempo, attributes }
+          })
+        )
+      }
+
+      const res = await api.updateAttributes(id, attributes)
+      if (!res.success) {
+        console.error('[FileBrowser] Attribute update failed:', res.error)
+        await loadTabs(false)
+      }
+    } catch (err) {
+      console.error('[FileBrowser] Error updating attributes:', err)
+      await loadTabs(false)
+    }
+  }
+
+  const longPressTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchStartPosRef = React.useRef<{ x: number; y: number } | null>(null)
+  const isLongPressActiveRef = React.useRef(false)
+
+  const handleTouchStart = (e: React.TouchEvent, tab: IGuitarTab): void => {
+    if (openingTabId) return
+    const touch = e.touches[0]
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+    isLongPressActiveRef.current = false
+
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current)
+    }
+
+    longPressTimeoutRef.current = setTimeout(() => {
+      isLongPressActiveRef.current = true
+      try {
+        if (navigator.vibrate) {
+          navigator.vibrate(40)
+        }
+      } catch {
+        // Ignore vibration failure
+      }
+      setContextMenu({
+        tab,
+        x: touch.clientX,
+        y: touch.clientY
+      })
+    }, 500)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent): void => {
+    if (!touchStartPosRef.current || !longPressTimeoutRef.current) return
+    const touch = e.touches[0]
+    const dx = Math.abs(touch.clientX - touchStartPosRef.current.x)
+    const dy = Math.abs(touch.clientY - touchStartPosRef.current.y)
+    if (dx > 10 || dy > 10) {
+      clearTimeout(longPressTimeoutRef.current)
+      longPressTimeoutRef.current = null
+    }
+  }
+
+  const handleTouchEnd = (): void => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current)
+      longPressTimeoutRef.current = null
     }
   }
 
@@ -650,8 +758,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }
   }
 
-  const handleDownload = async (e: React.MouseEvent, tab: IGuitarTab): Promise<void> => {
-    e.stopPropagation() // Prevent opening
+  const handleDownload = async (
+    e: React.MouseEvent | undefined,
+    tab: IGuitarTab
+  ): Promise<void> => {
+    e?.stopPropagation() // Prevent opening
     try {
       const res = await api.downloadFile(tab.id, tab.name)
       if (res.success) {
@@ -667,13 +778,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   }
 
   // Trigger Edit Modal
-  const handleEditClick = (e: React.MouseEvent, tab: IGuitarTab): void => {
-    e.stopPropagation()
+  const handleEditClick = (e: React.MouseEvent | undefined, tab: IGuitarTab): void => {
+    e?.stopPropagation()
     setEditTab(tab)
   }
 
-  const handleToggleFavorite = async (e: React.MouseEvent, tab: IGuitarTab): Promise<void> => {
-    e.stopPropagation()
+  const handleToggleFavorite = async (
+    e: React.MouseEvent | undefined,
+    tab: IGuitarTab
+  ): Promise<void> => {
+    e?.stopPropagation()
     try {
       const res = await api.updateAttributes(tab.id, {
         ...tab.attributes,
@@ -1667,10 +1781,29 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                       cursor: openingTabId === tab.id ? 'default' : 'pointer',
                       transition: 'background 0.2s, opacity 0.2s',
                       opacity: openingTabId === tab.id ? 0.75 : 1,
-                      pointerEvents: openingTabId ? 'none' : 'auto'
+                      pointerEvents: openingTabId ? 'none' : 'auto',
+                      WebkitTouchCallout: 'none',
+                      userSelect: 'none'
                     }}
-                    onClick={() => !openingTabId && handleOpen(tab)}
-                    title={openingTabId === tab.id ? 'Opening tab...' : 'Click to open'}
+                    onClick={() => {
+                      if (isLongPressActiveRef.current) {
+                        isLongPressActiveRef.current = false
+                        return
+                      }
+                      if (!openingTabId) {
+                        handleOpen(tab)
+                      }
+                    }}
+                    onContextMenu={(e) => handleTabContextMenu(e, tab)}
+                    onTouchStart={(e) => handleTouchStart(e, tab)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchCancel={handleTouchEnd}
+                    title={
+                      openingTabId === tab.id
+                        ? 'Opening tab...'
+                        : 'Click to open (or hold / right-click for options)'
+                    }
                     onMouseEnter={(e) => {
                       if (openingTabId !== tab.id) e.currentTarget.style.background = '#25252e'
                     }}
@@ -1740,6 +1873,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           </span>
                           {tab.attributes?.tempo && tab.attributes.tempo > 0 ? (
                             <span
+                              className="tempo-inline-text"
                               style={{
                                 fontSize: 12,
                                 fontWeight: 400,
@@ -1862,6 +1996,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                       </div>
 
                       <button
+                        className="tab-favorite-btn"
                         onClick={(e) => handleToggleFavorite(e, tab)}
                         style={{
                           background: 'transparent',
@@ -2034,6 +2169,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         }}
                       >
                         <button
+                          className="tab-download-btn"
                           onClick={(e) => handleDownload(e, tab)}
                           title="Download Tab"
                           style={{
@@ -2059,6 +2195,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           <Icons.Download size={18} />
                         </button>
                         <button
+                          className="tab-edit-btn"
                           onClick={(e) => handleEditClick(e, tab)}
                           title="Edit Details"
                           style={{
@@ -2084,6 +2221,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                           <Icons.Edit size={18} />
                         </button>
                         <button
+                          className="tab-delete-btn"
                           onClick={(e) => handleDeleteClick(e, tab)}
                           title="Delete Tab"
                           style={{
@@ -2108,16 +2246,44 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         >
                           <Icons.Trash2 size={18} />
                         </button>
+                        <button
+                          className="tab-more-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setContextMenu({
+                              tab,
+                              x: e.clientX,
+                              y: e.clientY
+                            })
+                          }}
+                          title="Quick Options"
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#888',
+                            cursor: 'pointer',
+                            padding: 8,
+                            borderRadius: 6,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#bb86fc'
+                            e.currentTarget.style.background = 'rgba(187, 134, 252, 0.1)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#888'
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                        >
+                          <Icons.MoreVertical size={18} />
+                        </button>
                       </div>
                     </td>
 
                     <td className="cell-metadata mobile-only">
                       <div className="metadata-row">
-                        {/* Tuning chip */}
-                        <span className="metadata-chip tuning-chip">
-                          {tab.attributes?.tuning || 'Standard'}
-                        </span>
-
                         {/* Tag chips */}
                         {tab.attributes?.tags?.map((tagName: string) => {
                           const tagColor = getTagColor(
@@ -2376,6 +2542,20 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             tab={gpViewerTab}
             initialSecondsPlayed={gpViewerTab?.attributes?.secondsPlayed || 0}
             onClose={handleCloseGpViewer}
+          />
+        )}
+
+        {contextMenu && (
+          <TabContextMenu
+            targetTab={contextMenu.tab}
+            position={{ x: contextMenu.x, y: contextMenu.y }}
+            allTags={availableTags}
+            onClose={() => setContextMenu(null)}
+            onUpdateAttributes={handleQuickUpdateAttributes}
+            onToggleFavorite={(tab) => handleToggleFavorite(undefined, tab)}
+            onDownload={(tab) => handleDownload(undefined, tab)}
+            onEdit={(tab) => handleEditClick(undefined, tab)}
+            onDelete={(tab) => handleDeleteClick(undefined, tab)}
           />
         )}
       </div>

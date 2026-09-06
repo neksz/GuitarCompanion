@@ -186,6 +186,10 @@ body {
     display: none !important;
   }
 
+  .tempo-inline-text {
+    display: none !important;
+  }
+
   .file-browser {
     padding: 15px !important;
   }
@@ -221,7 +225,7 @@ body {
 
   .tab-row {
     display: grid !important;
-    grid-template-columns: 1fr 120px;
+    grid-template-columns: 1fr auto;
     padding: 10px 0;
     max-width: 100% !important;
     overflow: hidden !important;
@@ -229,7 +233,7 @@ body {
 
   .cell-main {
     grid-column: 1;
-    padding: 10px 0 10px 16px !important;
+    padding: 10px 8px 10px 16px !important;
     border: none !important;
     min-width: 0 !important;
     overflow: hidden;
@@ -245,7 +249,8 @@ body {
     justify-content: flex-end;
     align-items: center;
     display: flex !important;
-    min-width: 120px;
+    min-width: auto !important;
+    flex-shrink: 0 !important;
   }
 
   .cell-metadata {
@@ -383,6 +388,15 @@ body {
 
   .cell-actions {
     min-width: auto !important;
+  }
+}
+
+@media (max-width: 400px) {
+  .tab-favorite-btn,
+  .tab-download-btn,
+  .tab-edit-btn,
+  .tab-delete-btn {
+    display: none !important;
   }
 }
 
