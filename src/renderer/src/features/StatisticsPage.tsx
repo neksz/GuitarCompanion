@@ -485,7 +485,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
             </div>
           </div>
           <div className={styles.chartContainer}>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#22222d" vertical={false} />
                 <XAxis
@@ -535,7 +535,7 @@ export const StatisticsPage: React.FC<StatisticsPageProps> = ({ onOpenSidebar })
             </div>
           </div>
           <div className={styles.chartContainer}>
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#22222d" vertical={false} />
                 <XAxis

@@ -2026,6 +2026,27 @@ export const GpViewer: React.FC<GpViewerProps> = ({
               </button>
             </div>
 
+            {/* Tuning & Capo Info on Mobile */}
+            <div className="gp-mobile-meta-row">
+              {currentTuning && (
+                <div className="gp-meta-pill" title={`Tuning: ${currentTuning}`}>
+                  <span className="gp-meta-label">Tuning:</span>
+                  <span className="gp-meta-value">{currentTuning}</span>
+                </div>
+              )}
+              {currentCapo > 0 ? (
+                <div className="gp-meta-pill capo-active" title={`Capo on Fret ${currentCapo}`}>
+                  <span className="gp-meta-label">Capo:</span>
+                  <span className="gp-meta-value">{currentCapo}</span>
+                </div>
+              ) : (
+                <div className="gp-meta-pill" title="No Capo">
+                  <span className="gp-meta-label">Capo:</span>
+                  <span className="gp-meta-value">None</span>
+                </div>
+              )}
+            </div>
+
             {/* Track Selector */}
             {tracks.length > 0 && (
               <div className="pdf-mobile-tools-section">

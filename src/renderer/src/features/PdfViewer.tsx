@@ -99,10 +99,12 @@ const PdfPage: React.FC<PdfPageProps> = ({
         // Compute optimal fit scale based on viewport size and layout
         let autoScale = 1.0
         const isNarrow = containerWidth < 900
-        // Padding inside .pdf-viewer-body: 16px top/bottom (32px total), 20px left/right (40px total)
-        // Include safety margin for card borders, box-shadow and sub-pixel rounding
-        const padV = isNarrow ? 28 : 36
-        const padH = isNarrow ? 28 : 48
+        const isMobileBar = containerWidth <= 768
+        // Padding inside .pdf-viewer-body:
+        // Desktop: 16px top/bottom (32px total), 20px left/right (40px total)
+        // Mobile/Tablet (<= 768px): 16px top + 76px bottom (92px total) for floating pagination bar
+        const padV = isMobileBar ? 96 : isNarrow ? 28 : 36
+        const padH = isMobileBar ? 20 : isNarrow ? 28 : 48
         const availableH = Math.max(containerHeight - padV - 16, 200)
         const availableW = Math.max(containerWidth - padH - 16, 200)
 

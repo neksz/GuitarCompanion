@@ -2178,6 +2178,19 @@ body {
   }
 }
 
+.gp-mobile-meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .pdf-header-left .gp-meta-pill {
+    display: none;
+  }
+}
+
 /* ==========================================================================
    GP SECTION LOOP STYLES
    ========================================================================== */
@@ -2867,6 +2880,25 @@ body {
   flex-direction: column;
   justify-content: space-between;
   gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .metronome-unified-hero-card {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .unified-bpm-col,
+  .unified-visualizer-col {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .unified-card-divider {
+    width: 100%;
+    height: 1px;
+    margin: 0;
+  }
 }
 
 .bpm-scroll-hint {
