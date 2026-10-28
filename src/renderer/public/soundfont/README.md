@@ -13,7 +13,6 @@ Powered by BASSMIDI Copyright 1993 Sonic Network, Inc. All Rights Reserved Soniv
 
 https://musical-artifacts.com/artifacts/1517
 
-This soundfont is based on the Sonivox EAS synthesizer, Copyright Sonic Network Inc. 2006. 
-Sonivox EAS belongs to the Android Open Source Project. 
+This soundfont is based on the Sonivox EAS synthesizer, Copyright Sonic Network Inc. 2006.
+Sonivox EAS belongs to the Android Open Source Project.
 https://android.googlesource.com/platform/external/sonivox/+/refs/heads/master
-
